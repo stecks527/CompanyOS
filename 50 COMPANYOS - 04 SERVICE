@@ -1,0 +1,69 @@
+/*************************************************
+ * 50 COMPANYOS - 04 SERVICE
+ * Version: 1.0.0
+ *************************************************/
+
+function CompanyOS() {
+  return {
+    setup: setupCompanyOS,
+    open: companyOSOpen_,
+    roster: companyOSGetRosterState_,
+    member: companyOSGetMember_,
+    save: companyOSSaveMember_,
+    previewContactSheet: companyOSBuildContactSheetPreview_,
+    applyContactSheet: applyCompanyOSContactSheet,
+    connectionAudit: companyOSBuildConnectionAudit_
+  };
+}
+
+function getCompanyOSDialogState() { return companyOSGetRosterState_(); }
+function getCompanyOSMember(memberId) { return companyOSGetMember_(memberId); }
+function saveCompanyOSMember(payload) {
+  const member = companyOSSaveMember_(payload);
+  return { success: true, member, roster: companyOSGetRosterState_() };
+}
+function getCompanyOSContactSheetPreview(memberId) { return companyOSBuildContactSheetPreview_(memberId); }
+function applyCompanyOSContactSheetFromDialog(memberId) {
+  const result = applyCompanyOSContactSheet(memberId);
+  return { success: true, result, audit: companyOSBuildConnectionAudit_(memberId) };
+}
+function getCompanyOSConnectionAudit(memberId) { return companyOSBuildConnectionAudit_(memberId); }
+
+function companyOSGetRosterState_() {
+  companyOSEnsureDatabase_();
+  const members = companyOSListMembers_();
+  return {
+    system: "CompanyOS", version: "1.0.0",
+    statuses: COMPANYOS_CONFIG.STATUS_OPTIONS.slice(),
+    departments: COMPANYOS_CONFIG.DEPARTMENT_OPTIONS.slice(),
+    members: members.map(m => ({ memberId: m.memberId, displayName: m.displayName,
+      legalName: m.legalName, professionalName: m.professionalName, department: m.department,
+      roleTitle: m.roleTitle, status: m.status, headshot: m.headshot, email: m.email, phone: m.phone }))
+  };
+}
+
+function companyOSBuildConnectionAudit_(memberId) {
+  const member = companyOSGetMember_(memberId);
+  if (!member) throw new Error("Company member not found.");
+  const p = companyOSBuildContactSheetPreview_(memberId);
+  return {
+    memberId, personName: member.displayName,
+    coreSync: [
+      { label: "Contact Sheet", status: p.ready ? (p.action === "UPDATE" ? "Connected" : "Not added") : "Needs review", action: p.action === "UPDATE" ? "Preview update" : "Add" },
+      { label: "Google Contacts", status: "Not connected yet", action: "Coming next" }
+    ],
+    stageOSConnections: [
+      { label: "Cast List", status: "Audit not built yet", action: "Later" },
+      { label: "Payroll", status: "Audit not built yet", action: "Later" },
+      { label: "IN/OUT Template", status: "Audit not built yet", action: "Later" },
+      { label: "U/S Tracker", status: "Audit not built yet", action: "Later" },
+      { label: "PD / Vacation Tracker", status: "Audit not built yet", action: "Later" }
+    ]
+  };
+}
+
+function testCompanyOSFoundation() {
+  companyOSEnsureDatabase_();
+  const state = companyOSGetRosterState_();
+  SpreadsheetApp.getUi().alert("CompanyOS foundation is online.\n\nMembers stored: " + state.members.length);
+}
