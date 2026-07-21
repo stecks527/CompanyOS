@@ -1,0 +1,120 @@
+/*************************************************
+ * 50 COMPANYOS - 03 CONTACT SHEET
+ * Version: 1.0.0
+ *************************************************/
+
+function companyOSBuildContactSheetPreview_(memberId) {
+  const member = companyOSGetMember_(memberId);
+  if (!member) return { ready: false, errors: ["Company member not found."], warnings: [] };
+
+  const sh = SpreadsheetApp.getActive().getSheetByName(COMPANYOS_CONFIG.CONTACT_SHEET_NAME);
+  if (!sh) return { ready: false, member, errors: ['Could not find "Contact Sheet".'], warnings: [] };
+
+  const values = sh.getRange(1, 1, sh.getLastRow(), Math.max(sh.getLastColumn(), 5)).getDisplayValues();
+  const keys = [member.displayName, member.professionalName, member.legalName].map(companyOSKey_).filter(Boolean);
+  const matches = [];
+  values.forEach((row, i) => {
+    if (keys.includes(companyOSKey_(row[0]))) {
+      matches.push({ row: i + 1, before: { name: row[0], pronouns: row[1], roleTitle: row[2], phone: row[3], email: row[4] } });
+    }
+  });
+
+  const publicPronouns = member.mayUsePronounsPublicly ? member.pronouns : member.publicPronouns;
+  const after = {
+    name: member.displayName || member.professionalName || member.legalName,
+    pronouns: member.sharePronouns ? companyOSClean_(publicPronouns) : "",
+    roleTitle: member.roleTitle,
+    phone: member.sharePhone ? member.phone : "",
+    email: member.shareEmail ? member.email : ""
+  };
+
+  if (matches.length) {
+    return { ready: true, action: "UPDATE", member, targetRow: matches[0].row,
+      before: matches[0].before, after, warnings: matches.length > 1 ? ["Multiple name matches found; first match selected."] : [], errors: [] };
+  }
+
+  const target = companyOSContactTarget_(member);
+  const headerRow = companyOSFindHeaderRow_(values, target.subsection || target.section, 1);
+  if (!headerRow) return { ready: false, action: "INSERT", member, after,
+    errors: ["Could not find Contact Sheet section: " + (target.subsection || target.section)], warnings: [] };
+
+  const nextHeader = companyOSFindNextHeaderRow_(sh, values, headerRow + 1) || values.length + 1;
+  let lastData = headerRow;
+  for (let r = headerRow + 1; r < nextHeader; r++) {
+    if (companyOSClean_(values[r - 1][0]) || companyOSClean_(values[r - 1][2])) lastData = r;
+  }
+
+  return { ready: true, action: "INSERT", member, targetRow: Math.min(lastData + 1, nextHeader),
+    targetSection: target.section, targetSubsection: target.subsection || "",
+    before: { name: "", pronouns: "", roleTitle: "", phone: "", email: "" }, after, warnings: [], errors: [] };
+}
+
+function applyCompanyOSContactSheet(memberId) {
+  const preview = companyOSBuildContactSheetPreview_(memberId);
+  if (!preview.ready) throw new Error((preview.errors || []).join("\n"));
+  const sh = SpreadsheetApp.getActive().getSheetByName(COMPANYOS_CONFIG.CONTACT_SHEET_NAME);
+  let row = preview.targetRow;
+
+  if (preview.action === "INSERT") {
+    sh.insertRowBefore(row);
+    const source = Math.max(row - 1, 1);
+    sh.getRange(source, 1, 1, Math.max(sh.getLastColumn(), 5)).copyTo(
+      sh.getRange(row, 1, 1, Math.max(sh.getLastColumn(), 5)),
+      SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false
+    );
+    sh.getRange(row, 1, 1, Math.max(sh.getLastColumn(), 5)).clearContent();
+  }
+
+  sh.getRange(row, 1, 1, 5).setValues([[
+    preview.after.name, preview.after.pronouns, preview.after.roleTitle,
+    preview.after.phone, preview.after.email
+  ]]).setFontFamily("Arial");
+
+  companyOSLog_(preview.member, "Contact Sheet", preview.action, "SUCCESS",
+    { row, before: preview.before, after: preview.after });
+  return { success: true, row, action: preview.action };
+}
+
+function companyOSContactTarget_(member) {
+  const d = companyOSKey_(member.department), r = companyOSKey_(member.roleTitle);
+  if (d === "cast") return { section: "CAST" };
+  if (d === "stage management" || r.includes("stage manager") || r === "psm" || r === "asm") return { section: "STAGE MANAGEMENT" };
+  if (d === "music") return { section: "MUSIC" };
+  if (d === "band") return { section: "BAND" };
+  if (d === "crew") {
+    let subsection = "";
+    if (/carp|deck carpenter/.test(r)) subsection = "CARPENTRY";
+    else if (/prop/.test(r)) subsection = "PROPS";
+    else if (/light|electric|spot|\blx\b/.test(r)) subsection = "ELECTRICS";
+    else if (/sound|audio|\ba1\b|\ba2\b/.test(r)) subsection = "SOUND";
+    else if (/wardrobe|dresser|hair|makeup/.test(r)) subsection = "WARDROBE";
+    return { section: "CREW", subsection };
+  }
+  const map = {
+    "creative team designers": "CREATIVE TEAM / DESIGNERS", "company management": "COMPANY MANAGEMENT",
+    "general management": "GENERAL MANAGEMENT", "production management": "PRODUCTION MANAGEMENT",
+    "producers": "PRODUCERS", "press": "PRESS", "advertising": "ADVERTISING", "services": "SERVICES",
+    "human resources": "HUMAN RESOURCES", "ticketing": "TICKETING",
+    "new world stages foh staff": "NEW WORLD STAGES FOH STAFF", "aea": "AEA", "alumni": "ALUMNI"
+  };
+  return { section: map[d] || String(member.department || "").toUpperCase() };
+}
+
+function companyOSFindHeaderRow_(values, label, start) {
+  const wanted = companyOSKey_(label);
+  for (let r = Math.max(start || 1, 1); r <= values.length; r++) {
+    const joined = values[r - 1].slice(0, 5).map(companyOSClean_).filter(Boolean).join(" ");
+    if (companyOSKey_(joined) === wanted || companyOSKey_(values[r - 1][0]) === wanted) return r;
+  }
+  return null;
+}
+
+function companyOSFindNextHeaderRow_(sh, values, start) {
+  for (let r = start; r <= values.length; r++) {
+    const nonEmpty = values[r - 1].slice(0, 5).map(companyOSClean_).filter(Boolean);
+    const merged = sh.getRange(r, 1, 1, 5).getMergedRanges();
+    if (merged.length && companyOSClean_(merged[0].getDisplayValue())) return r;
+    if (nonEmpty.length === 1 && nonEmpty[0] === nonEmpty[0].toUpperCase() && /[A-Z]/.test(nonEmpty[0])) return r;
+  }
+  return null;
+}
