@@ -1,0 +1,58 @@
+/*************************************************
+ * 50 COMPANYOS - 01 CONFIG
+ * Version: 1.0.0
+ *************************************************/
+
+const COMPANYOS_CONFIG = Object.freeze({
+  ENGINE_WORKBOOK_ID: "1pK4qgHRWyratU6L8_SYZh2QHtqPNCY83HxnY2qQmFho",
+  SHEETS: Object.freeze({
+    PEOPLE: "CompanyOS People",
+    ASSIGNMENTS: "CompanyOS Assignments",
+    PLANNED_OUTS: "CompanyOS Planned Outs",
+    SYNC_LOG: "CompanyOS Sync Log"
+  }),
+  CONTACT_SHEET_NAME: "Contact Sheet",
+  STATUS_OPTIONS: Object.freeze([
+    "Active", "Rehearsing", "Training", "On Leave",
+    "Returning", "Inactive", "Alumni"
+  ]),
+  DEPARTMENT_OPTIONS: Object.freeze([
+    "Cast", "Stage Management", "Crew", "Music", "Band",
+    "Creative Team / Designers", "Company Management",
+    "General Management", "Production Management", "Producers",
+    "Press", "Advertising", "Services", "Human Resources",
+    "Ticketing", "New World Stages FOH Staff", "AEA", "Alumni", "Other"
+  ])
+});
+
+const COMPANYOS_PEOPLE_HEADERS = Object.freeze([
+  "Member ID", "Status", "Department", "Role / Title",
+  "Legal Name", "Professional / Union Name", "Same As Legal Name",
+  "Display Name", "Pronouns", "May Use Pronouns Publicly",
+  "Public Pronouns / Alternate Language", "Email", "Phone", "Address",
+  "Birthday", "Celebrate Birthday", "Favorite Birthday Treat",
+  "Emergency Contact Name", "Emergency Contact Relationship",
+  "Emergency Contact Phone", "Allergies / Private SM Notes",
+  "Headshot URL / File ID", "Start Date", "End Date", "Return Date",
+  "Share Email", "Share Phone", "Share Address", "Share Birthday",
+  "Share Professional Name", "Share Pronouns", "Gmail Labels JSON",
+  "Created At", "Updated At", "Archived At"
+]);
+
+const COMPANYOS_ASSIGNMENT_HEADERS = Object.freeze([
+  "Assignment ID", "Member ID", "Department", "Role / Title",
+  "Assignment Type", "Status", "Start Date", "End Date",
+  "Temporary Replacement For Member ID", "Temporary Replacement For Name",
+  "Notes", "Created At", "Updated At"
+]);
+
+const COMPANYOS_PLANNED_OUT_HEADERS = Object.freeze([
+  "Planned Out ID", "Member ID", "Person Name", "Start Date", "End Date",
+  "Performance Scope", "Performance Count", "Status", "Reason", "Coverage",
+  "Notes", "Source", "Created At", "Updated At"
+]);
+
+const COMPANYOS_SYNC_LOG_HEADERS = Object.freeze([
+  "Timestamp", "Member ID", "Person Name", "Destination", "Action",
+  "Status", "Details JSON", "User"
+]);
