@@ -1,0 +1,982 @@
+/*************************************************
+ * 50 COMPANYOS - 07 CONTACT SHEET MIGRATION
+ * Version: 1.0.1
+ * Status: PREVIEW-FIRST MIGRATION
+ *
+ * Reads Contact Sheet columns:
+ * A Name
+ * B Pronouns
+ * C Role / Title
+ * D Phone
+ * E Email
+ *
+ * Safety:
+ * - Never changes Contact Sheet.
+ * - Creates a review sheet in the Engine workbook.
+ * - Imports only rows whose Include checkbox is checked.
+ * - Existing CompanyOS records are updated by exact name match.
+ *************************************************/
+
+const COMPANYOS_MIGRATION = Object.freeze({
+  PREVIEW_SHEET: "CompanyOS Migration Preview",
+
+  HEADERS: Object.freeze([
+    "Include",
+    "Source Row",
+    "Name",
+    "Pronouns",
+    "Department",
+    "Role / Title",
+    "Phone",
+    "Email",
+    "Proposed Status",
+    "Existing Member ID",
+    "Action",
+    "Warning"
+  ]),
+
+  MAJOR_SECTIONS: Object.freeze([
+    "PRODUCERS",
+    "MANAGEMENT",
+    "CREATIVE TEAM / DESIGNERS",
+    "MUSIC",
+    "CAST",
+    "BAND",
+    "CREW",
+    "SERVICES",
+    "HUMAN RESOURCES",
+    "TICKETING",
+    "PRESS / ADVERTISING",
+    "NEW WORLD STAGES FOH STAFF",
+    "VENUES",
+    "AEA",
+    "ALUMNI"
+  ]),
+
+  SUBSECTIONS: Object.freeze([
+    "GENERAL MANAGEMENT",
+    "COMPANY MANAGEMENT",
+    "PRODUCTION MANAGEMENT",
+    "STAGE MANAGEMENT",
+    "PRESS",
+    "ADVERTISING",
+    "ADMINISTRATION",
+    "THEATRE MANAGEMENT",
+    "BOX OFFICE",
+    "FACILITIES",
+    "STAGE DOOR / SECURITY",
+    "EVENTS",
+    "CARPENTRY",
+    "PROPS",
+    "ELECTRICS",
+    "SOUND",
+    "WARDROBE"
+  ])
+});
+
+
+/*************************************************
+ * PUBLIC FUNCTIONS
+ *************************************************/
+
+function previewCompanyOSContactSheetMigration() {
+  const result =
+    companyOSBuildContactSheetMigrationPreview_();
+
+  companyOSMigrationNotify_(
+    [
+      "CompanyOS migration preview created.",
+      "",
+      "Rows found: " + result.totalRows,
+      "Create: " + result.createCount,
+      "Update: " + result.updateCount,
+      "Warnings: " + result.warningCount,
+      "",
+      "Review this Engine tab:",
+      COMPANYOS_MIGRATION.PREVIEW_SHEET,
+      "",
+      "Uncheck any row you do not want imported."
+    ].join("\n")
+  );
+
+  return result;
+}
+
+
+function executeCompanyOSContactSheetMigration() {
+  companyOSEnsureDatabase_();
+
+  // Safety snapshot before any CompanyOS records are created or updated.
+  const backupName = companyOSCreatePeopleMigrationBackup_();
+
+  const engine = companyOSGetEngineWorkbook_();
+  const previewSheet = engine.getSheetByName(
+    COMPANYOS_MIGRATION.PREVIEW_SHEET
+  );
+
+  if (!previewSheet) {
+    throw new Error(
+      "Migration preview not found. Run " +
+      "previewCompanyOSContactSheetMigration() first."
+    );
+  }
+
+  const values = previewSheet.getDataRange().getValues();
+
+  if (values.length <= 1) {
+    throw new Error(
+      "Migration preview contains no records."
+    );
+  }
+
+  const headers = values[0];
+  const map = companyOSBuildHeaderMap_(headers);
+
+  const results = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    failures: []
+  };
+
+  values.slice(1).forEach(function (row, index) {
+    const previewRow = index + 2;
+
+    if (!companyOSBoolean_(row[map["Include"]])) {
+      results.skipped++;
+      return;
+    }
+
+    const name =
+      companyOSClean_(row[map["Name"]]);
+
+    try {
+      const existingMemberId =
+        companyOSClean_(
+          row[map["Existing Member ID"]]
+        );
+
+      const action =
+        companyOSClean_(
+          row[map["Action"]]
+        );
+
+      const pronouns =
+        companyOSClean_(
+          row[map["Pronouns"]]
+        );
+
+      const phone =
+        companyOSClean_(
+          row[map["Phone"]]
+        );
+
+      const email =
+        companyOSClean_(
+          row[map["Email"]]
+        );
+
+      const department =
+        companyOSClean_(
+          row[map["Department"]]
+        ) || "Other";
+
+      const status =
+        companyOSClean_(
+          row[map["Proposed Status"]]
+        ) || "Active";
+
+      const payload = {
+        memberId: existingMemberId,
+
+        status: status,
+        department: department,
+        roleTitle:
+          companyOSClean_(
+            row[map["Role / Title"]]
+          ) || "Company Member",
+
+        legalName: name,
+        professionalName: name,
+        sameAsLegalName: true,
+        displayName: name,
+
+        pronouns: pronouns,
+        mayUsePronounsPublicly: true,
+        publicPronouns: "",
+
+        email: email,
+        phone: phone,
+        address: "",
+
+        birthday: "",
+        celebrateBirthday: false,
+        favoriteBirthdayTreat: "",
+
+        emergencyContactName: "",
+        emergencyContactRelationship: "",
+        emergencyContactPhone: "",
+        allergiesPrivateNotes: "",
+
+        headshot: "",
+
+        startDate: "",
+        endDate: "",
+        returnDate: "",
+
+        shareEmail: Boolean(email),
+        sharePhone: Boolean(phone),
+        shareAddress: false,
+        shareBirthday: false,
+        shareProfessionalName: true,
+        sharePronouns: Boolean(pronouns),
+
+        gmailLabels:
+          companyOSMigrationSuggestedLabels_(
+            department,
+            status
+          )
+      };
+
+      const saved =
+        companyOSSaveMember_(payload);
+
+      if (action === "UPDATE") {
+        results.updated++;
+      } else {
+        results.created++;
+      }
+
+      previewSheet
+        .getRange(
+          previewRow,
+          map["Existing Member ID"] + 1
+        )
+        .setValue(saved.memberId);
+
+      previewSheet
+        .getRange(
+          previewRow,
+          map["Action"] + 1
+        )
+        .setValue("IMPORTED");
+
+      previewSheet
+        .getRange(
+          previewRow,
+          map["Warning"] + 1
+        )
+        .clearContent()
+        .setBackground(null);
+
+    } catch (err) {
+      results.failed++;
+
+      const errorText = String(
+        err && err.message
+          ? err.message
+          : err
+      );
+
+      results.failures.push({
+        previewRow: previewRow,
+        name: name,
+        error: errorText
+      });
+
+      previewSheet
+        .getRange(
+          previewRow,
+          map["Action"] + 1
+        )
+        .setValue("FAILED");
+
+      previewSheet
+        .getRange(
+          previewRow,
+          map["Warning"] + 1
+        )
+        .setValue(errorText)
+        .setBackground("#f4cccc");
+    }
+  });
+
+  companyOSMigrationNotify_(
+    [
+      "CompanyOS migration complete.",
+      "",
+      "Created: " + results.created,
+      "Updated: " + results.updated,
+      "Skipped: " + results.skipped,
+      "Failed: " + results.failed,
+      "Backup: " + backupName,
+      "",
+      results.failed
+        ? "Review FAILED rows in the migration preview."
+        : "All selected records imported successfully."
+    ].join("\n")
+  );
+
+  return results;
+}
+
+
+/*************************************************
+ * PREVIEW BUILDER
+ *************************************************/
+
+function companyOSBuildContactSheetMigrationPreview_() {
+  companyOSEnsureDatabase_();
+
+  const production =
+    SpreadsheetApp.getActiveSpreadsheet();
+
+  // Deliberately direct: migration should not depend on an optional config branch.
+  const contactSheet =
+    production.getSheetByName("Contact Sheet");
+
+  if (!contactSheet) {
+    throw new Error(
+      'Could not find "Contact Sheet".'
+    );
+  }
+
+  const rowCount =
+    Math.max(contactSheet.getLastRow(), 1);
+
+  const sourceValues =
+    contactSheet
+      .getRange(
+        1,
+        1,
+        rowCount,
+        5
+      )
+      .getDisplayValues();
+
+  const currentMembers =
+    companyOSListMembers_();
+
+  const rows =
+    companyOSParseContactSheetForMigration_(
+      contactSheet,
+      sourceValues,
+      currentMembers
+    );
+
+  const engine =
+    companyOSGetEngineWorkbook_();
+
+  let previewSheet =
+    engine.getSheetByName(
+      COMPANYOS_MIGRATION.PREVIEW_SHEET
+    );
+
+  if (!previewSheet) {
+    previewSheet =
+      engine.insertSheet(
+        COMPANYOS_MIGRATION.PREVIEW_SHEET
+      );
+  }
+
+  previewSheet.clear();
+
+  if (
+    previewSheet.getMaxColumns() <
+    COMPANYOS_MIGRATION.HEADERS.length
+  ) {
+    previewSheet.insertColumnsAfter(
+      previewSheet.getMaxColumns(),
+      COMPANYOS_MIGRATION.HEADERS.length -
+        previewSheet.getMaxColumns()
+    );
+  }
+
+  previewSheet
+    .getRange(
+      1,
+      1,
+      1,
+      COMPANYOS_MIGRATION.HEADERS.length
+    )
+    .setValues([
+      COMPANYOS_MIGRATION.HEADERS
+    ])
+    .setFontFamily("Arial")
+    .setFontWeight("bold")
+    .setBackground("#1f5cc4")
+    .setFontColor("#ffffff")
+    .setHorizontalAlignment("center");
+
+  if (rows.length) {
+    const output =
+      rows.map(function (row) {
+        return [
+          true,
+          row.sourceRow,
+          row.name,
+          row.pronouns,
+          row.department,
+          row.roleTitle,
+          row.phone,
+          row.email,
+          row.status,
+          row.existingMemberId,
+          row.action,
+          row.warning
+        ];
+      });
+
+    previewSheet
+      .getRange(
+        2,
+        1,
+        output.length,
+        output[0].length
+      )
+      .setValues(output)
+      .setFontFamily("Arial")
+      .setVerticalAlignment("top");
+
+    previewSheet
+      .getRange(
+        2,
+        1,
+        output.length,
+        1
+      )
+      .insertCheckboxes();
+
+    rows.forEach(function (row, index) {
+      const sheetRow = index + 2;
+
+      if (row.warning) {
+        previewSheet
+          .getRange(
+            sheetRow,
+            1,
+            1,
+            COMPANYOS_MIGRATION.HEADERS.length
+          )
+          .setBackground("#fff2cc");
+      }
+
+      if (row.action === "UPDATE") {
+        previewSheet
+          .getRange(sheetRow, 11)
+          .setBackground("#cfe2f3");
+      }
+    });
+  }
+
+  previewSheet.setFrozenRows(1);
+
+  previewSheet.autoResizeColumns(
+    1,
+    COMPANYOS_MIGRATION.HEADERS.length
+  );
+
+  previewSheet.setColumnWidth(3, 200);
+  previewSheet.setColumnWidth(5, 180);
+  previewSheet.setColumnWidth(6, 250);
+  previewSheet.setColumnWidth(12, 320);
+
+  return {
+    success: true,
+    totalRows: rows.length,
+
+    createCount:
+      rows.filter(function (row) {
+        return row.action === "CREATE";
+      }).length,
+
+    updateCount:
+      rows.filter(function (row) {
+        return row.action === "UPDATE";
+      }).length,
+
+    warningCount:
+      rows.filter(function (row) {
+        return Boolean(row.warning);
+      }).length
+  };
+}
+
+
+/*************************************************
+ * CONTACT SHEET PARSER
+ *************************************************/
+
+function companyOSParseContactSheetForMigration_(
+  sheet,
+  values,
+  currentMembers
+) {
+  const rows = [];
+
+  let majorSection = "";
+  let subsection = "";
+
+  for (let index = 0; index < values.length; index++) {
+    const sheetRow = index + 1;
+
+    const name =
+      companyOSClean_(values[index][0]);
+
+    const pronouns =
+      companyOSClean_(values[index][1]);
+
+    const roleTitle =
+      companyOSClean_(values[index][2]);
+
+    const phone =
+      companyOSClean_(values[index][3]);
+
+    const email =
+      companyOSClean_(values[index][4]);
+
+    const headerText =
+      companyOSMigrationHeaderText_(
+        sheet,
+        sheetRow,
+        values[index]
+      );
+
+    if (
+      companyOSMigrationIsMajorSection_(
+        headerText
+      )
+    ) {
+      majorSection = headerText;
+      subsection = "";
+      continue;
+    }
+
+    if (
+      companyOSMigrationIsSubsection_(
+        headerText
+      )
+    ) {
+      subsection = headerText;
+      continue;
+    }
+
+    if (
+      companyOSMigrationShouldSkipRow_(
+        name,
+        roleTitle,
+        phone,
+        email,
+        majorSection
+      )
+    ) {
+      continue;
+    }
+
+    const department =
+      companyOSMigrationResolveDepartment_(
+        majorSection,
+        subsection,
+        roleTitle
+      );
+
+    const existing =
+      companyOSMigrationFindExistingMember_(
+        currentMembers,
+        name
+      );
+
+    const warning =
+      companyOSMigrationBuildWarning_(
+        name,
+        roleTitle,
+        department,
+        existing
+      );
+
+    rows.push({
+      sourceRow: sheetRow,
+      name: name,
+      pronouns: pronouns,
+      department: department,
+      roleTitle:
+        roleTitle || "Company Member",
+      phone: phone,
+      email: email,
+      status:
+        majorSection === "ALUMNI"
+          ? "Alumni"
+          : "Active",
+      existingMemberId:
+        existing ? existing.memberId : "",
+      action:
+        existing ? "UPDATE" : "CREATE",
+      warning: warning
+    });
+  }
+
+  return rows;
+}
+
+
+function companyOSMigrationHeaderText_(
+  sheet,
+  row,
+  values
+) {
+  const range = sheet.getRange(row, 1, 1, 5);
+  const merged = range.getMergedRanges();
+
+  if (merged && merged.length) {
+    const mergedText =
+      companyOSClean_(
+        merged[0].getDisplayValue()
+      );
+
+    if (mergedText) {
+      return mergedText.toUpperCase();
+    }
+  }
+
+  const nonEmpty = values
+    .map(companyOSClean_)
+    .filter(Boolean);
+
+  if (
+    nonEmpty.length === 1 &&
+    nonEmpty[0] ===
+      nonEmpty[0].toUpperCase() &&
+    /[A-Z]/.test(nonEmpty[0])
+  ) {
+    return nonEmpty[0];
+  }
+
+  return "";
+}
+
+
+function companyOSMigrationIsMajorSection_(
+  value
+) {
+  return (
+    COMPANYOS_MIGRATION
+      .MAJOR_SECTIONS
+      .indexOf(
+        companyOSClean_(value).toUpperCase()
+      ) !== -1
+  );
+}
+
+
+function companyOSMigrationIsSubsection_(
+  value
+) {
+  return (
+    COMPANYOS_MIGRATION
+      .SUBSECTIONS
+      .indexOf(
+        companyOSClean_(value).toUpperCase()
+      ) !== -1
+  );
+}
+
+
+function companyOSMigrationShouldSkipRow_(
+  name,
+  roleTitle,
+  phone,
+  email,
+  majorSection
+) {
+  if (!majorSection) return true;
+
+  if (
+    majorSection === "VENUES"
+  ) {
+    return true;
+  }
+
+  if (!name) return true;
+
+  const nameKey =
+    companyOSKey_(name);
+
+  const skipNames = [
+    "contact sheet",
+    "confidential",
+    "full cast",
+    "management"
+  ];
+
+  if (
+    skipNames.indexOf(nameKey) !== -1
+  ) {
+    return true;
+  }
+
+  if (
+    /^updated\s*:/i.test(name)
+  ) {
+    return true;
+  }
+
+  if (
+    !roleTitle &&
+    !phone &&
+    !email
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+
+function companyOSMigrationResolveDepartment_(
+  majorSection,
+  subsection,
+  roleTitle
+) {
+  const major =
+    companyOSClean_(
+      majorSection
+    ).toUpperCase();
+
+  const sub =
+    companyOSClean_(
+      subsection
+    ).toUpperCase();
+
+  const roleKey =
+    companyOSKey_(roleTitle);
+
+  if (major === "CAST") {
+    return "Cast";
+  }
+
+  if (major === "BAND") {
+    return "Band";
+  }
+
+  if (major === "MUSIC") {
+    return "Music";
+  }
+
+  if (major === "CREW") {
+    return "Crew";
+  }
+
+  if (
+    sub === "STAGE MANAGEMENT"
+  ) {
+    return "Stage Management";
+  }
+
+  if (
+    sub === "GENERAL MANAGEMENT"
+  ) {
+    return "General Management";
+  }
+
+  if (
+    sub === "COMPANY MANAGEMENT"
+  ) {
+    return "Company Management";
+  }
+
+  if (
+    sub === "PRODUCTION MANAGEMENT"
+  ) {
+    return "Production Management";
+  }
+
+  if (sub === "PRESS") {
+    return "Press";
+  }
+
+  if (sub === "ADVERTISING") {
+    return "Advertising";
+  }
+
+  if (
+    major ===
+    "CREATIVE TEAM / DESIGNERS"
+  ) {
+    return "Creative Team / Designers";
+  }
+
+  if (major === "PRODUCERS") {
+    return "Producers";
+  }
+
+  if (major === "SERVICES") {
+    return "Services";
+  }
+
+  if (
+    major === "HUMAN RESOURCES"
+  ) {
+    return "Human Resources";
+  }
+
+  if (major === "TICKETING") {
+    return "Ticketing";
+  }
+
+  if (
+    major ===
+    "NEW WORLD STAGES FOH STAFF"
+  ) {
+    return "New World Stages FOH Staff";
+  }
+
+  if (major === "AEA") {
+    return "AEA";
+  }
+
+  if (major === "ALUMNI") {
+    return "Alumni";
+  }
+
+  if (
+    roleKey.indexOf("stage manager") !== -1 ||
+    roleKey === "psm" ||
+    roleKey === "asm"
+  ) {
+    return "Stage Management";
+  }
+
+  return "Other";
+}
+
+
+function companyOSMigrationFindExistingMember_(
+  members,
+  name
+) {
+  const target =
+    companyOSKey_(name);
+
+  return (
+    (members || []).find(function (member) {
+      return [
+        member.displayName,
+        member.professionalName,
+        member.legalName
+      ]
+        .map(companyOSKey_)
+        .filter(Boolean)
+        .indexOf(target) !== -1;
+    }) || null
+  );
+}
+
+
+function companyOSMigrationBuildWarning_(
+  name,
+  roleTitle,
+  department,
+  existing
+) {
+  const warnings = [];
+
+  if (!roleTitle) {
+    warnings.push("Missing role/title");
+  }
+
+  if (
+    department === "Other"
+  ) {
+    warnings.push(
+      "Department could not be confidently classified"
+    );
+  }
+
+  if (existing) {
+    warnings.push(
+      "Existing CompanyOS record will be updated"
+    );
+  }
+
+  if (!name) {
+    warnings.push("Missing name");
+  }
+
+  return warnings.join(" | ");
+}
+
+
+function companyOSMigrationSuggestedLabels_(
+  department,
+  status
+) {
+  const labels = ["StageOS Company"];
+
+  const departmentText =
+    companyOSClean_(department);
+
+  const statusText =
+    companyOSClean_(status);
+
+  if (departmentText) {
+    labels.push(departmentText);
+  }
+
+  if (
+    statusText &&
+    statusText !== "Active"
+  ) {
+    labels.push(statusText);
+  }
+
+  return labels;
+}
+
+
+/*************************************************
+ * SAFETY BACKUP
+ *************************************************/
+
+function companyOSCreatePeopleMigrationBackup_() {
+  const engine = companyOSGetEngineWorkbook_();
+  const peopleSheet = engine.getSheetByName(
+    COMPANYOS_CONFIG.SHEETS.PEOPLE
+  );
+
+  if (!peopleSheet) {
+    throw new Error(
+      'Could not find "' +
+      COMPANYOS_CONFIG.SHEETS.PEOPLE +
+      '" for migration backup.'
+    );
+  }
+
+  const stamp = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyyMMdd_HHmmss"
+  );
+
+  const backupName =
+    "CompanyOS People Backup " + stamp;
+
+  peopleSheet.copyTo(engine).setName(backupName);
+
+  return backupName;
+}
+
+
+/*************************************************
+ * UI-SAFE MESSAGE
+ *************************************************/
+
+function companyOSMigrationNotify_(message) {
+  try {
+    SpreadsheetApp
+      .getUi()
+      .alert(message);
+  } catch (err) {
+    Logger.log(message);
+  }
+}
