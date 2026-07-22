@@ -1,13 +1,23 @@
 /*************************************************
  * 50 COMPANYOS - 05 DIALOG
- * Version: 1.0.0
+ * Version: 1.2.0
  *************************************************/
 
 function openCompanyOS() {
   companyOSEnsureDatabase_();
-  const html = HtmlService.createTemplateFromFile("CompanyOSDialog")
-    .evaluate().setWidth(1180).setHeight(760);
-  SpreadsheetApp.getUi().showModalDialog(html, "CompanyOS — Company Roster");
+
+  const html = HtmlService
+    .createTemplateFromFile("CompanyOSDialog")
+    .evaluate()
+    .setWidth(1180)
+    .setHeight(760);
+
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    productionUIDialogTitle_("Company Roster")
+  );
 }
 
-function launchCompanyOS() { openCompanyOS(); }
+function launchCompanyOS() {
+  openCompanyOS();
+}
