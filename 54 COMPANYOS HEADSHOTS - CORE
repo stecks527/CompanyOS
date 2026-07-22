@@ -1,0 +1,1194 @@
+/*************************************************
+ * 54 COMPANYOS HEADSHOTS - CORE
+ *
+ * Main Headshot Folder
+ *      ↓
+ * Recursive scan
+ *      ↓
+ * Match CompanyOS members
+ *      ↓
+ * Preview
+ *      ↓
+ * Apply approved headshots
+ *      ↓
+ * CompanyOS Headshot Log
+ *************************************************/
+
+const COMPANYOS_HEADSHOTS = Object.freeze({
+  SETTINGS_SHEET_NAME: "Production Settings",
+  ENGINE_SETTING: "Engine Workbook",
+  ROOT_FOLDER_SETTING: "Main Headshot Folder",
+
+  PEOPLE_SHEET_NAME: "CompanyOS People",
+  LOG_SHEET_NAME: "CompanyOS Headshot Log",
+
+  DIALOG_TITLE: "CompanyOS Headshot Sync",
+  DIALOG_WIDTH: 1120,
+  DIALOG_HEIGHT: 780,
+
+  PEOPLE_HEADERS: Object.freeze({
+    MEMBER_ID: "Member ID",
+    LEGAL_NAME: "Legal Name",
+    PROFESSIONAL_NAME: "Professional / Union Name",
+    DISPLAY_NAME: "Display Name",
+
+    // The sync supports any of these existing CompanyOS layouts.
+    COMBINED_HEADSHOT: "Headshot URL / File ID",
+    FILE_ID: "Headshot File ID",
+    URL: "Headshot URL"
+  }),
+
+  IMAGE_EXTENSIONS: Object.freeze([
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "heic"
+  ])
+});
+
+
+/*************************************************
+ * PUBLIC LAUNCHERS
+ *************************************************/
+
+function companyOSOpenHeadshotSync() {
+  const template = HtmlService.createTemplateFromFile(
+    "54 COMPANYOS HEADSHOTS - HTML"
+  );
+
+  template.initialPayload = companyOSBuildHeadshotPreview_();
+
+  const html = template
+    .evaluate()
+    .setWidth(COMPANYOS_HEADSHOTS.DIALOG_WIDTH)
+    .setHeight(COMPANYOS_HEADSHOTS.DIALOG_HEIGHT);
+
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    COMPANYOS_HEADSHOTS.DIALOG_TITLE
+  );
+}
+
+
+/**
+ * Editor-safe backend test.
+ * This does not attempt to open a spreadsheet dialog.
+ */
+function companyOSTestHeadshotSync() {
+  const preview = companyOSBuildHeadshotPreview_();
+
+  console.log(
+    JSON.stringify(
+      {
+        summary: preview.summary,
+        readyToApply: preview.matched,
+        needsChoice: preview.ambiguous,
+        manualAssignments: preview.unmatchedPeople
+      },
+      null,
+      2
+    )
+  );
+
+  return preview.summary;
+}
+
+
+function companyOSRefreshHeadshotPreview() {
+  return companyOSBuildHeadshotPreview_();
+}
+
+
+/*************************************************
+ * SETTINGS + SOURCES
+ *************************************************/
+
+function companyOSHeadshotGetSetting_(settingName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const settingsSheet = ss.getSheetByName(
+    COMPANYOS_HEADSHOTS.SETTINGS_SHEET_NAME
+  );
+
+  if (!settingsSheet) {
+    throw new Error(
+      'Could not find the "' +
+        COMPANYOS_HEADSHOTS.SETTINGS_SHEET_NAME +
+        '" sheet.'
+    );
+  }
+
+  const values = settingsSheet.getDataRange().getDisplayValues();
+  const wanted = companyOSHeadshotNormalizeSettingLabel_(settingName);
+
+  for (let row = 0; row < values.length; row++) {
+    for (let column = 0; column < values[row].length; column++) {
+      const current =
+        companyOSHeadshotNormalizeSettingLabel_(values[row][column]);
+
+      if (current !== wanted) {
+        continue;
+      }
+
+      const value =
+        column + 1 < values[row].length
+          ? String(values[row][column + 1] || "").trim()
+          : "";
+
+      if (!value) {
+        throw new Error(
+          'The Settings entry "' +
+            settingName +
+            '" does not have a value in the cell immediately to its right.'
+        );
+      }
+
+      return value;
+    }
+  }
+
+  throw new Error(
+    'Could not find the Settings entry "' + settingName + '".'
+  );
+}
+
+
+function companyOSHeadshotNormalizeSettingLabel_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+
+function companyOSHeadshotExtractGoogleId_(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  const documentMatch = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+
+  if (documentMatch) {
+    return documentMatch[1];
+  }
+
+  const folderMatch = text.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+
+  if (folderMatch) {
+    return folderMatch[1];
+  }
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) {
+    return text;
+  }
+
+  throw new Error(
+    "Could not extract a Google resource ID from:\n" + text
+  );
+}
+
+
+function companyOSHeadshotGetSources_() {
+  const mainSS = SpreadsheetApp.getActiveSpreadsheet();
+
+  const engineId = companyOSHeadshotExtractGoogleId_(
+    companyOSHeadshotGetSetting_(
+      COMPANYOS_HEADSHOTS.ENGINE_SETTING
+    )
+  );
+
+  const rootFolderId = companyOSHeadshotExtractGoogleId_(
+    companyOSHeadshotGetSetting_(
+      COMPANYOS_HEADSHOTS.ROOT_FOLDER_SETTING
+    )
+  );
+
+  let engineSS;
+  let rootFolder;
+
+  try {
+    engineSS = SpreadsheetApp.openById(engineId);
+  } catch (error) {
+    throw new Error(
+      'Could not open the spreadsheet listed under "' +
+        COMPANYOS_HEADSHOTS.ENGINE_SETTING +
+        '" in Settings.\n\n' +
+        companyOSHeadshotErrorMessage_(error)
+    );
+  }
+
+  try {
+    rootFolder = DriveApp.getFolderById(rootFolderId);
+    rootFolder.getName();
+  } catch (error) {
+    throw new Error(
+      'Could not open the Drive folder listed under "' +
+        COMPANYOS_HEADSHOTS.ROOT_FOLDER_SETTING +
+        '" in Settings.\n\n' +
+        companyOSHeadshotErrorMessage_(error)
+    );
+  }
+
+  const peopleSheet = engineSS.getSheetByName(
+    COMPANYOS_HEADSHOTS.PEOPLE_SHEET_NAME
+  );
+
+  if (!peopleSheet) {
+    throw new Error(
+      'Could not find "' +
+        COMPANYOS_HEADSHOTS.PEOPLE_SHEET_NAME +
+        '" in the Engine workbook.'
+    );
+  }
+
+  return {
+    mainSS: mainSS,
+    engineSS: engineSS,
+    peopleSheet: peopleSheet,
+    rootFolder: rootFolder
+  };
+}
+
+
+/*************************************************
+ * PREVIEW
+ *************************************************/
+
+function companyOSBuildHeadshotPreview_() {
+  const sources = companyOSHeadshotGetSources_();
+
+  const peopleTable = companyOSHeadshotReadTable_(
+    sources.peopleSheet
+  );
+
+  companyOSHeadshotValidatePeopleHeaders_(
+    peopleTable.headerMap
+  );
+
+  const storageLayout =
+    companyOSHeadshotResolveStorageLayout_(
+      peopleTable.headerMap
+    );
+
+  const allPeople = companyOSHeadshotBuildPeople_(
+    peopleTable.rows,
+    peopleTable.headerMap,
+    storageLayout
+  );
+
+  const usedStoredFileIds = {};
+
+  allPeople.forEach(function(person) {
+    if (person.currentReference) {
+      usedStoredFileIds[person.currentReference] = true;
+    }
+  });
+
+  const missingPeople = allPeople.filter(function(person) {
+    return !person.currentReference;
+  });
+
+  const scannedFiles = companyOSHeadshotScanFolderTree_(
+    sources.rootFolder
+  );
+
+  const availableFiles = scannedFiles.filter(function(file) {
+    return !usedStoredFileIds[file.fileId];
+  });
+
+  const fileIndexes =
+    companyOSHeadshotBuildFileIndexes_(availableFiles);
+
+  const matched = [];
+  const ambiguous = [];
+  const unmatchedPeople = [];
+  const reservedPreviewFileIds = {};
+
+  missingPeople.forEach(function(person) {
+    const result = companyOSHeadshotFindMatches_(
+      person,
+      fileIndexes
+    );
+
+    if (result.status === 'MATCHED') {
+      const file = result.files[0];
+      reservedPreviewFileIds[file.fileId] = true;
+
+      matched.push(
+        companyOSHeadshotBuildMatchedPreview_(
+          person,
+          file,
+          result.matchMethod,
+          storageLayout
+        )
+      );
+
+      return;
+    }
+
+    if (result.status === 'AMBIGUOUS') {
+      result.files.forEach(function(file) {
+        reservedPreviewFileIds[file.fileId] = true;
+      });
+
+      ambiguous.push({
+        memberId: person.memberId,
+        personName: companyOSHeadshotPersonLabel_(person),
+        legalName: person.legalName,
+        professionalName: person.professionalName,
+        displayName: person.displayName,
+        currentDisplay: person.currentDisplay,
+        currentReference: person.currentReference,
+        choices: result.files.map(
+          companyOSHeadshotFileForClient_
+        )
+      });
+
+      return;
+    }
+
+    unmatchedPeople.push({
+      memberId: person.memberId,
+      personName: companyOSHeadshotPersonLabel_(person),
+      legalName: person.legalName,
+      professionalName: person.professionalName,
+      displayName: person.displayName,
+      currentDisplay: person.currentDisplay,
+      currentReference: person.currentReference
+    });
+  });
+
+  const manualAssignmentFiles = availableFiles
+    .filter(function(file) {
+      return !reservedPreviewFileIds[file.fileId];
+    })
+    .map(companyOSHeadshotFileForClient_);
+
+  matched.sort(companyOSHeadshotSortByPersonName_);
+  ambiguous.sort(companyOSHeadshotSortByPersonName_);
+  unmatchedPeople.sort(companyOSHeadshotSortByPersonName_);
+  manualAssignmentFiles.sort(function(a, b) {
+    return a.fileName.localeCompare(b.fileName);
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    rootFolderName: sources.rootFolder.getName(),
+    storageLayout: storageLayout,
+
+    summary: {
+      totalPeople: allPeople.length,
+      completePeople: allPeople.length - missingPeople.length,
+      missingPeople: missingPeople.length,
+      readyToApply: matched.length,
+      needsChoice: ambiguous.length + unmatchedPeople.length,
+      ambiguousPeople: ambiguous.length,
+      manualPeople: unmatchedPeople.length,
+      imageFilesScanned: scannedFiles.length,
+      availableFiles: availableFiles.length
+    },
+
+    matched: matched,
+    ambiguous: ambiguous,
+    unmatchedPeople: unmatchedPeople,
+    unmatchedFiles: manualAssignmentFiles
+  };
+}
+
+function companyOSHeadshotBuildMatchedPreview_(
+  person,
+  file,
+  matchMethod,
+  storageLayout
+) {
+  return {
+    memberId: person.memberId,
+    personName: companyOSHeadshotPersonLabel_(person),
+    matchMethod: matchMethod,
+    currentDisplay: person.currentDisplay,
+    currentReference: person.currentReference,
+    file: companyOSHeadshotFileForClient_(file),
+    hasChange: true,
+    selectedByDefault: true
+  };
+}
+
+
+/*************************************************
+ * APPLY
+ *************************************************/
+
+/**
+ * Expected payload:
+ * {
+ *   selections: [
+ *     {
+ *       memberId: "...",
+ *       fileId: "...",
+ *       expectedCurrentReference: "..."
+ *     }
+ *   ]
+ * }
+ */
+function companyOSApplyHeadshotSelections(payload) {
+  if (!payload || !Array.isArray(payload.selections)) {
+    throw new Error("No headshot selections were supplied.");
+  }
+
+  if (!payload.selections.length) {
+    return {
+      appliedCount: 0,
+      skippedCount: 0,
+      conflictCount: 0,
+      conflicts: [],
+      message: "No headshots were selected."
+    };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const sources = companyOSHeadshotGetSources_();
+
+    const peopleTable = companyOSHeadshotReadTable_(
+      sources.peopleSheet
+    );
+
+    companyOSHeadshotValidatePeopleHeaders_(
+      peopleTable.headerMap
+    );
+
+    const storageLayout =
+      companyOSHeadshotResolveStorageLayout_(
+        peopleTable.headerMap
+      );
+
+    const people = companyOSHeadshotBuildPeople_(
+      peopleTable.rows,
+      peopleTable.headerMap,
+      storageLayout
+    );
+
+    const peopleById = {};
+
+    people.forEach(function(person) {
+      peopleById[person.memberId] = person;
+    });
+
+    const logRows = [];
+    const conflicts = [];
+
+    let appliedCount = 0;
+    let skippedCount = 0;
+
+    payload.selections.forEach(function(selection) {
+      const memberId = companyOSHeadshotClean_(
+        selection.memberId
+      );
+
+      const fileId = companyOSHeadshotClean_(
+        selection.fileId
+      );
+
+      const person = peopleById[memberId];
+
+      if (!memberId || !fileId || !person) {
+        skippedCount++;
+        return;
+      }
+
+      let file;
+
+      try {
+        file = DriveApp.getFileById(fileId);
+      } catch (error) {
+        skippedCount++;
+        return;
+      }
+
+      if (!companyOSHeadshotIsImageFile_(file)) {
+        skippedCount++;
+        return;
+      }
+
+      const currentReference =
+        companyOSHeadshotNormalizeStoredReference_(
+          person.currentFileId,
+          person.currentUrl,
+          person.currentCombined
+        );
+
+      const expectedReference =
+        companyOSHeadshotClean_(
+          selection.expectedCurrentReference
+        );
+
+      if (
+        expectedReference &&
+        currentReference !== expectedReference
+      ) {
+        conflicts.push({
+          memberId: memberId,
+          personName: companyOSHeadshotPersonLabel_(person),
+          expected: expectedReference,
+          current: currentReference,
+          proposedFileName: file.getName()
+        });
+        return;
+      }
+
+      const fileInfo = {
+        fileId: file.getId(),
+        fileName: file.getName(),
+        url: file.getUrl()
+      };
+
+      const proposed = companyOSHeadshotProposedValues_(
+        fileInfo,
+        storageLayout
+      );
+
+      const proposedReference =
+        companyOSHeadshotNormalizeStoredReference_(
+          proposed.fileId,
+          proposed.url,
+          proposed.combined
+        );
+
+      if (currentReference === proposedReference) {
+        skippedCount++;
+        return;
+      }
+
+      companyOSHeadshotWritePerson_(
+        sources.peopleSheet,
+        person.sheetRow,
+        peopleTable.headerMap,
+        storageLayout,
+        proposed
+      );
+
+      appliedCount++;
+
+      logRows.push([
+        new Date(),
+        memberId,
+        companyOSHeadshotPersonLabel_(person),
+        person.currentDisplay,
+        fileInfo.fileName,
+        fileInfo.fileId,
+        fileInfo.url,
+        Session.getActiveUser().getEmail() || ""
+      ]);
+    });
+
+    if (logRows.length) {
+      companyOSHeadshotAppendLogRows_(
+        sources.engineSS,
+        logRows
+      );
+    }
+
+    SpreadsheetApp.flush();
+
+    return {
+      appliedCount: appliedCount,
+      skippedCount: skippedCount,
+      conflictCount: conflicts.length,
+      conflicts: conflicts,
+      message:
+        appliedCount +
+        " headshot" +
+        (appliedCount === 1 ? "" : "s") +
+        " applied."
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+function companyOSHeadshotWritePerson_(
+  sheet,
+  sheetRow,
+  headerMap,
+  storageLayout,
+  proposed
+) {
+  const H = COMPANYOS_HEADSHOTS.PEOPLE_HEADERS;
+
+  if (storageLayout.hasCombined) {
+    sheet
+      .getRange(
+        sheetRow,
+        headerMap[H.COMBINED_HEADSHOT] + 1
+      )
+      .setValue(proposed.combined);
+  }
+
+  if (storageLayout.hasFileId) {
+    sheet
+      .getRange(
+        sheetRow,
+        headerMap[H.FILE_ID] + 1
+      )
+      .setValue(proposed.fileId);
+  }
+
+  if (storageLayout.hasUrl) {
+    sheet
+      .getRange(
+        sheetRow,
+        headerMap[H.URL] + 1
+      )
+      .setValue(proposed.url);
+  }
+}
+
+
+/*************************************************
+ * FOLDER SCAN
+ *************************************************/
+
+function companyOSHeadshotScanFolderTree_(rootFolder) {
+  const files = [];
+  const visited = {};
+
+  companyOSHeadshotScanFolder_(
+    rootFolder,
+    "",
+    files,
+    visited
+  );
+
+  return files;
+}
+
+
+function companyOSHeadshotScanFolder_(
+  folder,
+  parentPath,
+  output,
+  visited
+) {
+  const folderId = folder.getId();
+
+  if (visited[folderId]) {
+    return;
+  }
+
+  visited[folderId] = true;
+
+  const currentPath = parentPath
+    ? parentPath + " / " + folder.getName()
+    : folder.getName();
+
+  const fileIterator = folder.getFiles();
+
+  while (fileIterator.hasNext()) {
+    const file = fileIterator.next();
+
+    if (!companyOSHeadshotIsImageFile_(file)) {
+      continue;
+    }
+
+    output.push({
+      fileId: file.getId(),
+      fileName: file.getName(),
+      url: file.getUrl(),
+      mimeType: file.getMimeType(),
+      folderPath: currentPath,
+      modifiedTime: file.getLastUpdated().getTime(),
+      normalizedBaseName:
+        companyOSHeadshotNormalizeFileBaseName_(
+          file.getName()
+        )
+    });
+  }
+
+  const folderIterator = folder.getFolders();
+
+  while (folderIterator.hasNext()) {
+    companyOSHeadshotScanFolder_(
+      folderIterator.next(),
+      currentPath,
+      output,
+      visited
+    );
+  }
+}
+
+
+function companyOSHeadshotIsImageFile_(file) {
+  const mimeType = companyOSHeadshotClean_(
+    file.getMimeType()
+  ).toLowerCase();
+
+  if (mimeType.indexOf("image/") === 0) {
+    return true;
+  }
+
+  const extension = companyOSHeadshotFileExtension_(
+    file.getName()
+  );
+
+  return (
+    COMPANYOS_HEADSHOTS.IMAGE_EXTENSIONS.indexOf(
+      extension
+    ) !== -1
+  );
+}
+
+
+/*************************************************
+ * MATCHING
+ *************************************************/
+
+function companyOSHeadshotBuildFileIndexes_(files) {
+  const byBaseName = {};
+
+  files.forEach(function(file) {
+    companyOSHeadshotIndexPush_(
+      byBaseName,
+      file.normalizedBaseName,
+      file
+    );
+  });
+
+  return {
+    byBaseName: byBaseName
+  };
+}
+
+
+function companyOSHeadshotFindMatches_(person, indexes) {
+  const candidates = [
+    {
+      method: "Professional / Union Name",
+      key: companyOSHeadshotNormalizeName_(
+        person.professionalName
+      )
+    },
+    {
+      method: "Legal Name",
+      key: companyOSHeadshotNormalizeName_(
+        person.legalName
+      )
+    },
+    {
+      method: "Display Name",
+      key: companyOSHeadshotNormalizeName_(
+        person.displayName
+      )
+    }
+  ];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+
+    if (!candidate.key) {
+      continue;
+    }
+
+    const matches =
+      indexes.byBaseName[candidate.key] || [];
+
+    if (matches.length === 1) {
+      return {
+        status: "MATCHED",
+        matchMethod: candidate.method,
+        files: matches
+      };
+    }
+
+    if (matches.length > 1) {
+      return {
+        status: "AMBIGUOUS",
+        matchMethod: candidate.method,
+        files: companyOSHeadshotSortFilesNewestFirst_(
+          matches.slice()
+        )
+      };
+    }
+  }
+
+  return {
+    status: "UNMATCHED",
+    files: []
+  };
+}
+
+
+/*************************************************
+ * PEOPLE + STORAGE
+ *************************************************/
+
+function companyOSHeadshotBuildPeople_(
+  rows,
+  headerMap,
+  storageLayout
+) {
+  const H = COMPANYOS_HEADSHOTS.PEOPLE_HEADERS;
+
+  return rows
+    .map(function(row) {
+      const currentCombined = storageLayout.hasCombined
+        ? row.values[headerMap[H.COMBINED_HEADSHOT]]
+        : "";
+
+      const currentFileId = storageLayout.hasFileId
+        ? row.values[headerMap[H.FILE_ID]]
+        : "";
+
+      const currentUrl = storageLayout.hasUrl
+        ? row.values[headerMap[H.URL]]
+        : "";
+
+      return {
+        sheetRow: row.sheetRow,
+        memberId: companyOSHeadshotClean_(
+          row.values[headerMap[H.MEMBER_ID]]
+        ),
+        legalName: companyOSHeadshotClean_(
+          row.values[headerMap[H.LEGAL_NAME]]
+        ),
+        professionalName: companyOSHeadshotClean_(
+          row.values[headerMap[H.PROFESSIONAL_NAME]]
+        ),
+        displayName: companyOSHeadshotClean_(
+          row.values[headerMap[H.DISPLAY_NAME]]
+        ),
+        currentCombined:
+          companyOSHeadshotClean_(currentCombined),
+        currentFileId:
+          companyOSHeadshotClean_(currentFileId),
+        currentUrl:
+          companyOSHeadshotClean_(currentUrl),
+        currentDisplay:
+          companyOSHeadshotCurrentDisplay_(
+            currentFileId,
+            currentUrl,
+            currentCombined
+          ),
+        currentReference:
+          companyOSHeadshotNormalizeStoredReference_(
+            currentFileId,
+            currentUrl,
+            currentCombined
+          )
+      };
+    })
+    .filter(function(person) {
+      return Boolean(person.memberId);
+    });
+}
+
+
+function companyOSHeadshotResolveStorageLayout_(headerMap) {
+  const H = COMPANYOS_HEADSHOTS.PEOPLE_HEADERS;
+
+  const layout = {
+    hasCombined:
+      headerMap[H.COMBINED_HEADSHOT] !== undefined,
+    hasFileId:
+      headerMap[H.FILE_ID] !== undefined,
+    hasUrl:
+      headerMap[H.URL] !== undefined
+  };
+
+  if (
+    !layout.hasCombined &&
+    !layout.hasFileId &&
+    !layout.hasUrl
+  ) {
+    throw new Error(
+      COMPANYOS_HEADSHOTS.PEOPLE_SHEET_NAME +
+        " needs at least one of these columns:\n\n" +
+        H.COMBINED_HEADSHOT +
+        "\n" +
+        H.FILE_ID +
+        "\n" +
+        H.URL
+    );
+  }
+
+  return layout;
+}
+
+
+function companyOSHeadshotProposedValues_(
+  file,
+  storageLayout
+) {
+  return {
+    fileId: file.fileId,
+    url: file.url,
+    combined: storageLayout.hasCombined
+      ? file.fileId
+      : ""
+  };
+}
+
+
+/*************************************************
+ * TABLE + HEADERS
+ *************************************************/
+
+function companyOSHeadshotReadTable_(sheet) {
+  const values = sheet.getDataRange().getValues();
+
+  if (!values.length) {
+    return {
+      headers: [],
+      headerMap: {},
+      rows: []
+    };
+  }
+
+  const headers = values[0].map(function(value) {
+    return companyOSHeadshotClean_(value)
+      .replace(/\s+/g, " ")
+      .trim();
+  });
+
+  const headerMap = {};
+
+  headers.forEach(function(header, index) {
+    if (header && headerMap[header] === undefined) {
+      headerMap[header] = index;
+    }
+  });
+
+  return {
+    headers: headers,
+    headerMap: headerMap,
+    rows: values.slice(1).map(function(row, index) {
+      return {
+        sheetRow: index + 2,
+        values: row
+      };
+    })
+  };
+}
+
+
+function companyOSHeadshotValidatePeopleHeaders_(headerMap) {
+  const H = COMPANYOS_HEADSHOTS.PEOPLE_HEADERS;
+
+  const required = [
+    H.MEMBER_ID,
+    H.LEGAL_NAME,
+    H.PROFESSIONAL_NAME,
+    H.DISPLAY_NAME
+  ];
+
+  const missing = required.filter(function(header) {
+    return headerMap[header] === undefined;
+  });
+
+  if (missing.length) {
+    throw new Error(
+      COMPANYOS_HEADSHOTS.PEOPLE_SHEET_NAME +
+        " is missing required columns:\n\n" +
+        missing.join("\n")
+    );
+  }
+}
+
+
+/*************************************************
+ * LOG
+ *************************************************/
+
+function companyOSHeadshotAppendLogRows_(engineSS, rows) {
+  let sheet = engineSS.getSheetByName(
+    COMPANYOS_HEADSHOTS.LOG_SHEET_NAME
+  );
+
+  if (!sheet) {
+    sheet = engineSS.insertSheet(
+      COMPANYOS_HEADSHOTS.LOG_SHEET_NAME
+    );
+  }
+
+  const headers = [
+    "Timestamp",
+    "Member ID",
+    "Person",
+    "Old Headshot",
+    "New File",
+    "New File ID",
+    "New URL",
+    "Applied By"
+  ];
+
+  if (sheet.getLastRow() === 0) {
+    sheet
+      .getRange(1, 1, 1, headers.length)
+      .setValues([headers])
+      .setFontWeight("bold");
+
+    sheet.setFrozenRows(1);
+  }
+
+  sheet
+    .getRange(
+      sheet.getLastRow() + 1,
+      1,
+      rows.length,
+      headers.length
+    )
+    .setValues(rows);
+}
+
+
+/*************************************************
+ * CLIENT + DISPLAY HELPERS
+ *************************************************/
+
+function companyOSHeadshotFileForClient_(file) {
+  return {
+    fileId: file.fileId,
+    fileName: file.fileName,
+    url: file.url,
+    folderPath: file.folderPath || "",
+    modifiedTime: file.modifiedTime || 0
+  };
+}
+
+
+function companyOSHeadshotPersonLabel_(person) {
+  return (
+    person.displayName ||
+    person.professionalName ||
+    person.legalName ||
+    person.memberId
+  );
+}
+
+
+function companyOSHeadshotCurrentDisplay_(
+  fileId,
+  url,
+  combined
+) {
+  return (
+    companyOSHeadshotClean_(url) ||
+    companyOSHeadshotClean_(fileId) ||
+    companyOSHeadshotClean_(combined) ||
+    "No headshot"
+  );
+}
+
+
+function companyOSHeadshotNormalizeStoredReference_(
+  fileId,
+  url,
+  combined
+) {
+  const values = [fileId, url, combined];
+
+  for (let i = 0; i < values.length; i++) {
+    const value = companyOSHeadshotClean_(values[i]);
+
+    if (!value) {
+      continue;
+    }
+
+    try {
+      return companyOSHeadshotExtractGoogleId_(value);
+    } catch (error) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+
+/*************************************************
+ * NORMALIZATION
+ *************************************************/
+
+function companyOSHeadshotNormalizeFileBaseName_(fileName) {
+  const withoutExtension = companyOSHeadshotClean_(
+    fileName
+  ).replace(/\.[^.]+$/, "");
+
+  return companyOSHeadshotNormalizeName_(
+    withoutExtension
+      .replace(/\b(headshot|photo|portrait|hs)\b/gi, " ")
+      .replace(/\b(20\d{2})\b/g, " ")
+      .replace(/\s+/g, " ")
+  );
+}
+
+
+function companyOSHeadshotNormalizeName_(value) {
+  return companyOSHeadshotClean_(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function companyOSHeadshotFileExtension_(fileName) {
+  const match = companyOSHeadshotClean_(
+    fileName
+  ).toLowerCase().match(/\.([^.]+)$/);
+
+  return match ? match[1] : "";
+}
+
+
+function companyOSHeadshotClean_(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+
+function companyOSHeadshotIndexPush_(index, key, value) {
+  if (!key) {
+    return;
+  }
+
+  if (!index[key]) {
+    index[key] = [];
+  }
+
+  index[key].push(value);
+}
+
+
+function companyOSHeadshotSortFilesNewestFirst_(files) {
+  return files.sort(function(a, b) {
+    if (a.modifiedTime !== b.modifiedTime) {
+      return b.modifiedTime - a.modifiedTime;
+    }
+
+    return a.fileName.localeCompare(b.fileName);
+  });
+}
+
+
+function companyOSHeadshotSortByPersonName_(a, b) {
+  return a.personName.localeCompare(b.personName);
+}
+
+
+function companyOSHeadshotErrorMessage_(error) {
+  return error && error.message
+    ? error.message
+    : String(error || "Unknown error");
+}
