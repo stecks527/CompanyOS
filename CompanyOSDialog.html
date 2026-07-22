@@ -2,64 +2,1842 @@
 <html>
 <head>
   <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root{--blue:#1f5cc4;--soft:#eaf1ff;--border:#d7dce5;--muted:#667085;--text:#20242b;--bg:#f5f7fb;--danger:#b42318;--success:#18794e}
-    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Arial,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}
-    .app{display:grid;grid-template-columns:260px minmax(0,1fr);height:100vh}.side{background:#fff;border-right:1px solid var(--border);padding:16px;overflow:auto}.main{padding:18px;overflow:auto}
-    h1{font-size:22px;margin:0}h3{font-size:16px;margin:0 0 5px}.muted{color:var(--muted);font-size:12px}.search,input,select,textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:9px 10px;margin-top:5px;background:#fff}.search{margin:12px 0 10px}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.chip,.btn{border:1px solid var(--border);border-radius:10px;background:#fff;padding:8px 11px;font-weight:700}.chip{padding:6px 9px;font-size:12px}.chip.active{background:var(--soft);color:var(--blue);border-color:var(--blue)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}.full{width:100%}
-    .person{display:block;width:100%;text-align:left;border:1px solid var(--border);border-radius:11px;background:#fff;padding:10px;margin-bottom:8px}.person.selected{background:var(--soft);border-color:var(--blue)}.pname{font-weight:700}.pmeta{font-size:12px;color:var(--muted);margin-top:3px}
-    .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}.private{border-left:5px solid var(--danger)}.grid2,.grid3{display:grid;gap:12px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}label{display:block;font-size:12px;font-weight:700}.checks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}.check{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:9px;padding:9px;font-weight:400}.check input{width:auto;margin:0}.top{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}.pill{background:var(--soft);color:var(--blue);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}.sync{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.syncitem{display:flex;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:10px;padding:10px}.actions{position:sticky;bottom:-18px;background:rgba(245,247,251,.96);border-top:1px solid var(--border);padding:14px 0 2px;display:flex;justify-content:flex-end;gap:8px}.hidden{display:none!important}.msg{min-height:20px;color:var(--muted)}.msg.error{color:var(--danger);font-weight:700}.msg.success{color:var(--success);font-weight:700}.empty{background:#fff;border:1px dashed var(--border);border-radius:14px;padding:40px;text-align:center;color:var(--muted)}textarea{min-height:70px;resize:vertical}
+    :root{
+      --navy:#16345f;
+      --blue:#245fc5;
+      --blue-2:#3975d6;
+      --blue-soft:#edf4ff;
+      --ink:#1f2937;
+      --muted:#6b7280;
+      --line:#dce3ee;
+      --panel:#ffffff;
+      --page:#f4f7fb;
+      --danger:#b42318;
+      --danger-soft:#fff1f0;
+      --success:#18794e;
+      --success-soft:#edf9f3;
+      --warning:#9a6700;
+      --warning-soft:#fff8e6;
+      --shadow:0 12px 34px rgba(20,52,95,.09);
+      --radius:18px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      overflow:hidden;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(36,95,197,.08), transparent 34%),
+        linear-gradient(180deg,#f8faff 0%,var(--page) 100%);
+      font:14px/1.45 Arial,Helvetica,sans-serif;
+    }
+
+    button,input,select,textarea{font:inherit}
+    button{cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+
+    .app{
+      display:grid;
+      grid-template-columns:300px minmax(0,1fr);
+      height:100vh;
+    }
+
+    .sidebar{
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      min-height:0;
+      overflow:hidden;
+      background:rgba(255,255,255,.96);
+      border-right:1px solid var(--line);
+      box-shadow:6px 0 24px rgba(20,52,95,.04);
+    }
+
+    .brand{
+      padding:22px 20px 17px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(135deg,#ffffff 0%,#f4f8ff 100%);
+    }
+
+    .eyebrow{
+      color:var(--blue);
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+    }
+
+    .brand h1{
+      margin:4px 0 2px;
+      font-size:25px;
+      line-height:1.15;
+      letter-spacing:-.02em;
+      color:var(--navy);
+    }
+
+    .brand-copy{color:var(--muted);font-size:12px}
+
+    .side-tools{
+      flex:none;
+      padding:15px 16px 12px;
+    }
+    .search-wrap{position:relative}
+    .search{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:11px 12px;
+      background:#fff;
+      outline:none;
+      transition:.15s ease;
+    }
+    .search:focus{
+      border-color:var(--blue);
+      box-shadow:0 0 0 3px rgba(36,95,197,.10);
+    }
+
+    .filters{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+
+    .chip{
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:#fff;
+      color:#475467;
+      padding:6px 9px;
+      font-size:11px;
+      font-weight:800;
+    }
+
+    .chip.active{
+      border-color:var(--blue);
+      color:var(--blue);
+      background:var(--blue-soft);
+    }
+
+    .roster{
+      flex:1 1 auto;
+      min-height:0;
+      overflow-y:auto;
+      overflow-x:hidden;
+      overscroll-behavior:contain;
+      padding:0 12px 12px;
+      scrollbar-gutter:stable;
+    }
+
+    .person{
+      display:flex;
+      align-items:center;
+      gap:11px;
+      width:100%;
+      margin:0 0 8px;
+      padding:10px 11px;
+      text-align:left;
+      border:1px solid transparent;
+      border-radius:13px;
+      background:transparent;
+      color:inherit;
+      transition:.14s ease;
+    }
+
+    .person:hover{
+      background:#f7f9fc;
+      border-color:#e6ebf3;
+    }
+
+    .person.selected{
+      background:linear-gradient(135deg,#edf4ff,#f7faff);
+      border-color:#9ebbea;
+      box-shadow:0 6px 14px rgba(36,95,197,.09);
+    }
+
+    .person-copy{min-width:0;flex:1}
+    .person-name{
+      overflow:hidden;
+      color:#23324a;
+      font-weight:800;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .person-meta{
+      overflow:hidden;
+      margin-top:2px;
+      color:var(--muted);
+      font-size:12px;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .avatar{
+      position:relative;
+      display:grid;
+      place-items:center;
+      flex:none;
+      overflow:hidden;
+      width:42px;
+      height:42px;
+      border:1px solid rgba(36,95,197,.18);
+      border-radius:50%;
+      background:linear-gradient(135deg,#e6efff,#f5f8ff);
+      color:var(--navy);
+      font-size:13px;
+      font-weight:800;
+      letter-spacing:.02em;
+    }
+
+    .avatar img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .avatar.large{
+      width:96px;
+      height:96px;
+      border:3px solid rgba(255,255,255,.34);
+      background:rgba(255,255,255,.16);
+      color:#fff;
+      font-size:25px;
+      box-shadow:0 12px 30px rgba(5,22,51,.18);
+    }
+
+    .no-results{
+      padding:26px 14px;
+      text-align:center;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .sidebar-actions{
+      padding:13px 16px 17px;
+      border-top:1px solid var(--line);
+      background:#fff;
+    }
+
+    .btn{
+      border:1px solid var(--line);
+      border-radius:11px;
+      background:#fff;
+      color:#344054;
+      padding:9px 13px;
+      font-weight:800;
+      transition:.14s ease;
+    }
+
+    .btn:hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(20,52,95,.08)}
+    .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+    .btn.primary:hover{background:var(--blue-2)}
+    .btn.danger{background:var(--danger-soft);border-color:#f0b4ae;color:var(--danger)}
+    .btn.success{background:var(--success-soft);border-color:#9ad6b9;color:var(--success)}
+    .btn.full{width:100%}
+    .btn + .btn.full{margin-top:8px}
+
+    .main{
+      min-width:0;
+      overflow:auto;
+      padding:24px;
+    }
+
+    .empty{
+      min-height:calc(100vh - 48px);
+      display:grid;
+      place-items:center;
+    }
+
+    .empty-card{
+      width:min(640px,100%);
+      padding:44px;
+      text-align:center;
+      background:rgba(255,255,255,.9);
+      border:1px solid var(--line);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+    }
+
+    .empty-card h2{
+      margin:0 0 8px;
+      color:var(--navy);
+      font-size:26px;
+    }
+
+    .empty-card p{margin:0 auto 22px;color:var(--muted);max-width:440px}
+
+    .editor{max-width:1160px;margin:0 auto}
+    .hidden{display:none!important}
+
+    .hero{
+      position:relative;
+      overflow:hidden;
+      display:grid;
+      grid-template-columns:auto minmax(0,1fr) auto;
+      gap:20px;
+      align-items:center;
+      margin-bottom:16px;
+      padding:24px;
+      color:#fff;
+      background:
+        linear-gradient(135deg,rgba(22,52,95,.99),rgba(36,95,197,.94));
+      border-radius:22px;
+      box-shadow:var(--shadow);
+    }
+
+    .hero:after{
+      content:"";
+      position:absolute;
+      width:260px;
+      height:260px;
+      right:-80px;
+      top:-125px;
+      border-radius:50%;
+      background:rgba(255,255,255,.08);
+    }
+
+    .hero-photo,
+    .hero-main,
+    .hero-side{
+      position:relative;
+      z-index:1;
+    }
+
+    .hero-main{min-width:0}
+    .hero h2{
+      margin:0 0 5px;
+      font-size:31px;
+      line-height:1.08;
+      letter-spacing:-.03em;
+      overflow-wrap:anywhere;
+    }
+
+    .hero-role{
+      font-size:15px;
+      font-weight:800;
+      opacity:.96;
+    }
+
+    .hero-department{
+      margin-top:2px;
+      font-size:13px;
+      opacity:.76;
+    }
+
+    .hero-contact{
+      display:flex;
+      gap:8px 16px;
+      flex-wrap:wrap;
+      margin-top:14px;
+      font-size:12px;
+      opacity:.9;
+    }
+
+    .hero-contact-item{
+      overflow:hidden;
+      max-width:100%;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .hero-side{
+      align-self:start;
+      display:flex;
+      justify-content:flex-end;
+    }
+
+    .status-pill{
+      flex:none;
+      padding:7px 11px;
+      border:1px solid rgba(255,255,255,.25);
+      border-radius:999px;
+      background:rgba(255,255,255,.14);
+      backdrop-filter:blur(8px);
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .layout{
+      display:grid;
+      grid-template-columns:minmax(0,1.15fr) minmax(310px,.85fr);
+      gap:16px;
+      align-items:start;
+    }
+
+    .stack{min-width:0}
+
+    .card{
+      margin-bottom:16px;
+      padding:18px;
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:0 8px 24px rgba(20,52,95,.05);
+    }
+
+    .card.private{
+      border-left:5px solid #d75b50;
+      background:linear-gradient(180deg,#fff,#fffafa);
+    }
+
+    .card-head{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      margin-bottom:14px;
+    }
+
+    .card h3{
+      margin:0;
+      color:var(--navy);
+      font-size:16px;
+      letter-spacing:-.01em;
+    }
+
+    .section-copy{margin-top:3px;color:var(--muted);font-size:12px}
+
+    .grid2,.grid3{display:grid;gap:12px}
+    .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .mt{margin-top:12px}
+
+    label{display:block;color:#475467;font-size:12px;font-weight:800}
+
+    input,select,textarea{
+      width:100%;
+      margin-top:5px;
+      padding:10px 11px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#fff;
+      color:var(--ink);
+      outline:none;
+      transition:.15s ease;
+    }
+
+    input:focus,select:focus,textarea:focus{
+      border-color:var(--blue);
+      box-shadow:0 0 0 3px rgba(36,95,197,.09);
+    }
+
+    input:disabled{background:#f2f4f7;color:#7a8492}
+    textarea{min-height:76px;resize:vertical}
+
+    .check-row{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      width:max-content;
+      max-width:100%;
+      margin-top:10px;
+      padding:8px 10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#fafbfd;
+      color:#475467;
+      font-weight:700;
+    }
+
+    .check-row input,.toggle input{width:auto;margin:0}
+
+    .sharing{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
+      margin-top:13px;
+    }
+
+    .toggle{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-height:42px;
+      padding:9px 10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#fbfcfe;
+      color:#475467;
+      font-weight:700;
+    }
+
+    .sync-list{display:grid;gap:9px}
+    .sync-item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      min-width:0;
+      padding:11px 12px;
+      border:1px solid var(--line);
+      border-radius:11px;
+      background:#fbfcfe;
+    }
+
+    .sync-label{font-weight:800;color:#344054}
+    .sync-status{margin-top:2px;color:var(--muted);font-size:11px}
+    .tag{
+      flex:none;
+      padding:5px 8px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:#fff;
+      color:#667085;
+      font-size:10px;
+      font-weight:800;
+    }
+
+    .bottom-bar{
+      position:sticky;
+      bottom:-24px;
+      z-index:5;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      margin-top:4px;
+      padding:14px 0 4px;
+      background:linear-gradient(180deg,rgba(244,247,251,0),rgba(244,247,251,.97) 28%);
+    }
+
+    .bottom-left,.bottom-right{display:flex;gap:8px;flex-wrap:wrap}
+    .message{min-height:20px;margin:2px 2px 7px;color:var(--muted);font-size:12px;font-weight:700}
+    .message.error{color:var(--danger)}
+    .message.success{color:var(--success)}
+    .message.warning{color:var(--warning)}
+
+    .migration-note{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:11px;
+      text-align:center;
+    }
+
+    .photo-editor{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+
+    .photo-preview{
+      width:68px;
+      height:68px;
+      border-radius:50%;
+    }
+
+    .photo-fields{min-width:0;flex:1}
+
+    .history-card{
+      padding:20px;
+    }
+
+    .history-intro{
+      margin:0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .history-preview{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+      margin-top:15px;
+    }
+
+    .history-item{
+      min-height:76px;
+      padding:13px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fbfcfe;
+    }
+
+    .history-label{
+      color:#344054;
+      font-weight:800;
+    }
+
+    .history-copy{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:11px;
+    }
+
+    .coming-soon{
+      display:inline-flex;
+      align-items:center;
+      margin-left:8px;
+      padding:4px 7px;
+      border:1px solid #bfd0ef;
+      border-radius:999px;
+      background:var(--blue-soft);
+      color:var(--blue);
+      font-size:10px;
+      font-weight:800;
+      vertical-align:middle;
+    }
+
+    .visually-hidden{
+      position:absolute!important;
+      width:1px!important;
+      height:1px!important;
+      padding:0!important;
+      margin:-1px!important;
+      overflow:hidden!important;
+      clip:rect(0,0,0,0)!important;
+      white-space:nowrap!important;
+      border:0!important;
+    }
+
+
+    .hero-edit{
+      display:block;
+      width:max-content;
+      max-width:100%;
+      margin:0;
+      padding:2px 28px 2px 5px;
+      color:#fff;
+      border:1px solid transparent;
+      border-radius:8px;
+      background:transparent;
+      appearance:none;
+      -webkit-appearance:none;
+      cursor:pointer;
+    }
+    .hero-edit:hover,.hero-edit:focus{
+      border-color:rgba(255,255,255,.28);
+      background:rgba(255,255,255,.10);
+      outline:none;
+    }
+    .hero-role-edit{font-size:15px;font-weight:800}
+    .hero-department-edit{margin-top:2px;font-size:13px;opacity:.86}
+    .hero-status-edit{
+      padding:7px 28px 7px 11px;
+      border-color:rgba(255,255,255,.25);
+      border-radius:999px;
+      background-color:rgba(255,255,255,.14);
+      font-size:12px;
+      font-weight:800;
+      backdrop-filter:blur(8px);
+    }
+    .hero-photo-button{
+      padding:0;border:0;border-radius:50%;background:transparent;color:inherit;
+    }
+    .hero-photo-button:hover{transform:none;box-shadow:0 0 0 4px rgba(255,255,255,.14)}
+    .hero-photo-hint{margin-top:7px;text-align:center;font-size:10px;font-weight:800;opacity:.76}
+    .full-card{grid-column:1 / -1}
+    .profile-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
+    .span-2{grid-column:span 2}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-5{grid-column:span 5}.span-6{grid-column:span 6}.span-7{grid-column:span 7}.span-8{grid-column:span 8}.span-12{grid-column:span 12}
+    .field-with-share{position:relative}
+    .share-mini{
+      display:inline-flex;align-items:center;gap:6px;margin-top:6px;color:#596579;font-size:11px;font-weight:800;
+    }
+    .share-mini input{width:auto;margin:0}
+    .privacy-note{margin-top:6px;color:var(--muted);font-size:11px}
+    .subhead{margin:2px 0 10px;color:var(--navy);font-size:13px;font-weight:800}
+    .detail-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(310px,.85fr);gap:16px;align-items:stretch}
+    .detail-layout>.card{height:100%}
+    .right-stack{display:grid;grid-template-rows:auto 1fr;gap:16px;min-width:0}
+    .right-stack>.card{margin-bottom:0}
+    .return-panel{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+    .labels-preview{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+    .label-chip{padding:6px 9px;border:1px solid #bfd0ef;border-radius:999px;background:var(--blue-soft);color:var(--blue);font-size:11px;font-weight:800}
+    .systems-card{padding:14px 18px}
+    .systems-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .systems-ok{color:var(--success);font-weight:800}
+    .systems-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}
+    .systems-grid .sync-item{min-height:62px}
+    .section-toggle{padding:7px 10px;font-size:11px}
+    .action-row{display:flex;gap:8px;flex-wrap:wrap}
+    .small-btn{padding:7px 10px;font-size:11px}
+
+    @media(max-width:900px){
+      .app{grid-template-columns:250px minmax(0,1fr)}
+      .layout,.detail-layout{grid-template-columns:1fr}
+      .profile-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+      .span-2,.span-3,.span-4,.span-5,.span-6,.span-7,.span-8{grid-column:span 3}
+      .span-12{grid-column:span 6}
+      .systems-grid{grid-template-columns:1fr 1fr}
+      .grid3{grid-template-columns:1fr 1fr}
+      .history-preview{grid-template-columns:1fr 1fr}
+    }
+
+    @media(max-width:680px){
+      .app{grid-template-columns:1fr}
+      .sidebar{display:none}
+      .main{padding:12px}
+      .grid2,.grid3,.sharing,.systems-grid{grid-template-columns:1fr}
+      .profile-grid{grid-template-columns:1fr}
+      .profile-grid>[class*="span-"]{grid-column:auto}
+      .hero{
+        grid-template-columns:auto minmax(0,1fr);
+        border-radius:16px;
+      }
+      .hero-side{grid-column:1 / -1;justify-content:flex-start}
+      .avatar.large{width:76px;height:76px;font-size:20px}
+      .history-preview{grid-template-columns:1fr}
+    }
   </style>
 </head>
+
 <body>
 <div class="app">
-  <aside class="side">
-    <h2 style="margin:0">Company roster</h2><div class="muted">CompanyOS Engine database</div>
-    <input id="search" class="search" placeholder="Search people or roles">
-    <div id="filters" class="chips"><button class="chip active" data-f="All">All</button><button class="chip" data-f="Active">Active</button><button class="chip" data-f="Returning">Returning</button><button class="chip" data-f="Inactive">Inactive</button></div>
-    <div id="roster"></div><button id="add" class="btn primary full">+ Add company member</button>
+  <aside class="sidebar">
+    <div class="brand">
+      <div id="productionShortName" class="eyebrow">PRODUCTION</div>
+      <h1>Company Roster</h1>
+      <div class="brand-copy">Company roster and onboarding</div>
+    </div>
+
+    <div class="side-tools">
+      <div class="search-wrap">
+        <input id="search" class="search" placeholder="Search names, roles, or departments">
+      </div>
+      <div id="filters" class="filters">
+        <button class="chip active" data-filter="All">All</button>
+        <button class="chip" data-filter="Active">Active</button>
+        <button class="chip" data-filter="Returning">Returning</button>
+        <button class="chip" data-filter="Inactive">Inactive</button>
+      </div>
+    </div>
+
+    <div id="roster" class="roster"></div>
+
+    <div class="sidebar-actions">
+      <button id="addMember" class="btn primary full">Add Company Member</button>
+      <button id="importContactSheet" class="btn full">Import Contact Sheet</button>
+      <div class="migration-note">Preview first. Nothing imports until you approve it.</div>
+    </div>
   </aside>
+
   <main class="main">
-    <div id="empty" class="empty">Select a company member or add a new one.</div>
-    <div id="editor" class="hidden">
-      <div class="top"><div><h1 id="title">New company member</h1><div id="subtitle" class="muted"></div></div><span id="pill" class="pill">Draft</span></div>
+    <div id="emptyState" class="empty">
+      <div class="empty-card">
+        <div id="emptyProductionName" class="eyebrow">PRODUCTION</div>
+        <h2 id="emptyTitle">Build the Company Roster</h2>
+        <p id="emptyCopy">Import the existing Contact Sheet or create a new company member. The Company Roster will become the single source of truth.</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button id="emptyImport" class="btn">Import Contact Sheet</button>
+          <button id="emptyAdd" class="btn primary">Add Company Member</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="editor" class="editor hidden">
+      <header class="hero">
+        <div class="hero-photo">
+          <button id="editHeroPhoto" type="button" class="hero-photo-button" title="Open Headshot Manager">
+            <div id="heroAvatar" class="avatar large" aria-label="Profile Photo"></div>
+          </button>
+          <div class="hero-photo-hint">Edit Photo</div>
+        </div>
+
+        <div class="hero-main">
+          <h2 id="heroName">New Company Member</h2>
+          <input id="roleTitle" class="hero-edit hero-role-edit" placeholder="Role / Title">
+          <select id="department" class="hero-edit hero-department-edit" aria-label="Department"></select>
+          <div class="hero-contact">
+            <div id="heroEmail" class="hero-contact-item"></div>
+            <div id="heroPhone" class="hero-contact-item"></div>
+          </div>
+        </div>
+
+        <div class="hero-side">
+          <select id="status" class="hero-edit hero-status-edit" aria-label="Status"></select>
+        </div>
+      </header>
+
       <input id="memberId" type="hidden">
-      <section class="card"><h3>Basic profile</h3><p class="muted">Roster identity and primary StageOS classification.</p><div class="grid3"><label>Status<select id="status"></select></label><label>Department<select id="department"></select></label><label>Role / title<input id="roleTitle"></label></div><div class="grid2" style="margin-top:12px"><label>Headshot URL / Drive file ID<input id="headshot"></label><label>Display name<input id="displayName"></label></div></section>
-      <section class="card"><h3>Personal identity</h3><p class="muted">Legal, professional, and public-facing identity.</p><div class="grid2"><label>Legal name<input id="legalName"></label><label>Professional / union name<input id="professionalName"></label></div><label class="check" style="margin-top:10px"><input id="sameAsLegalName" type="checkbox">Same as legal name</label><div class="grid2" style="margin-top:12px"><label>Pronouns<input id="pronouns"></label><label>May these pronouns be used publicly?<select id="mayUsePronounsPublicly"><option value="true">Yes</option><option value="false">No</option></select></label></div><label id="publicPronounsWrap" style="margin-top:12px">What should be used publicly instead?<input id="publicPronouns"></label></section>
-      <section class="card"><h3>Contact information & sharing</h3><p class="muted">Choose what may appear on the Contact Sheet.</p><div class="grid2"><label>Email<input id="email" type="email"></label><label>Phone<input id="phone"></label></div><label style="margin-top:12px">Address<textarea id="address"></textarea></label><div class="checks"><label class="check"><input id="shareEmail" type="checkbox">Share email</label><label class="check"><input id="sharePhone" type="checkbox">Share phone</label><label class="check"><input id="shareAddress" type="checkbox">Share address</label><label class="check"><input id="shareBirthday" type="checkbox">Share birthday</label><label class="check"><input id="shareProfessionalName" type="checkbox">Share professional name</label><label class="check"><input id="sharePronouns" type="checkbox">Share pronouns</label></div></section>
-      <section class="card"><h3>Contract & company state</h3><div class="grid3"><label>Start date<input id="startDate" type="date"></label><label>End date<input id="endDate" type="date"></label><label>Return date<input id="returnDate" type="date"></label></div></section>
-      <section class="card"><h3>Birthday preferences</h3><div class="grid3"><label>Birthday<input id="birthday" type="date"></label><label>Celebrate with the company?<select id="celebrateBirthday"><option value="true">Yes</option><option value="false">No</option></select></label><label id="treatWrap">Favorite birthday treat<input id="favoriteBirthdayTreat"></label></div></section>
-      <section class="card private"><h3>Emergency contact & private SM notes</h3><p class="muted">Private. Never included on the public Contact Sheet.</p><div class="grid3"><label>Emergency contact name<input id="emergencyContactName"></label><label>Relationship<input id="emergencyContactRelationship"></label><label>Emergency contact phone<input id="emergencyContactPhone"></label></div><label style="margin-top:12px">Allergies or private information stage management should know<textarea id="allergiesPrivateNotes"></textarea></label></section>
-      <section class="card"><h3>Email labels</h3><p class="muted">Stored now for future Google Contacts sync. One label per line.</p><textarea id="gmailLabels" placeholder="Full Company&#10;Cast&#10;Current Company"></textarea></section>
-      <section class="card"><h3>Core sync</h3><div id="core" class="sync"></div></section>
-      <section class="card"><h3>StageOS connections</h3><p class="muted">Audit shell only. No automatic secondary writes.</p><div id="connections" class="sync"></div></section>
-      <div id="msg" class="msg"></div>
-      <div class="actions"><button id="close" class="btn">Close</button><button id="preview" class="btn">Preview Contact Sheet</button><button id="apply" class="btn">Apply Contact Sheet</button><button id="save" class="btn primary">Save company record</button></div>
+      <input id="displayName" type="hidden">
+      <input id="headshot" type="hidden">
+      <input id="sameAsLegalName" type="checkbox" class="hidden">
+      <input id="mayUsePronounsPublicly" type="hidden" value="true">
+      <input id="publicPronouns" type="hidden">
+      <input id="shareAddress" type="checkbox" class="hidden">
+      <input id="shareProfessionalName" type="checkbox" class="hidden" checked>
+
+      <section class="card full-card">
+        <div class="card-head">
+          <div>
+            <h3>Personal Identity</h3>
+            <div class="section-copy">Legal, professional, contact, and private personal information.</div>
+          </div>
+        </div>
+
+        <div class="profile-grid">
+          <label class="span-4">Legal Name
+            <input id="legalName">
+          </label>
+          <label class="span-5">Professional / Union Name
+            <input id="professionalName">
+          </label>
+          <div class="span-3 field-with-share">
+            <label>Pronouns
+              <input id="pronouns">
+            </label>
+            <label class="share-mini"><input id="sharePronouns" type="checkbox"> Share</label>
+          </div>
+
+          <div class="span-4 field-with-share">
+            <label>Email
+              <input id="email" type="email">
+            </label>
+            <label class="share-mini"><input id="shareEmail" type="checkbox"> Share</label>
+          </div>
+          <div class="span-4 field-with-share">
+            <label>Phone
+              <input id="phone">
+            </label>
+            <label class="share-mini"><input id="sharePhone" type="checkbox"> Share</label>
+          </div>
+          <label class="span-4">Address
+            <textarea id="address" style="min-height:86px"></textarea>
+            <div class="privacy-note">Private — Never Included On Public Rosters Or Reports.</div>
+          </label>
+
+          <label class="span-4">Birthday
+            <input id="birthday" type="date">
+          </label>
+          <label class="span-4">Birthday Preferences
+            <select id="celebrateBirthday">
+              <option value="true">Celebrate With The Company</option>
+              <option value="false">Do Not Celebrate</option>
+            </select>
+          </label>
+          <label id="treatWrap" class="span-4">Favorite Birthday Treat
+            <input id="favoriteBirthdayTreat">
+          </label>
+          <input id="shareBirthday" type="checkbox" class="hidden">
+        </div>
+      </section>
+
+      <div class="detail-layout">
+        <section class="card private">
+          <div class="card-head">
+            <div>
+              <h3>Emergency / Private Notes</h3>
+              <div class="section-copy">Private information for authorized users.</div>
+            </div>
+          </div>
+
+          <div class="subhead">Emergency Contact</div>
+          <div class="grid3">
+            <label>Name
+              <input id="emergencyContactName">
+            </label>
+            <label>Relationship
+              <input id="emergencyContactRelationship">
+            </label>
+            <label>Phone
+              <input id="emergencyContactPhone">
+            </label>
+          </div>
+
+          <label class="mt">Allergies / Private Notes
+            <textarea id="allergiesPrivateNotes" style="min-height:126px"></textarea>
+          </label>
+        </section>
+
+        <div class="right-stack">
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h3>Contract / Company State</h3>
+                <div class="section-copy">Current and returning company dates.</div>
+              </div>
+            </div>
+
+            <div class="grid2">
+              <label>Start Date
+                <input id="startDate" type="date">
+              </label>
+              <label>End Date
+                <input id="endDate" type="date">
+              </label>
+            </div>
+
+            <div class="mt action-row">
+              <button id="toggleReturn" type="button" class="btn small-btn">Returning?</button>
+            </div>
+
+            <div id="returnPanel" class="return-panel hidden">
+              <div class="subhead">Next Contract Period</div>
+              <div class="grid2">
+                <label>New Start Date
+                  <input id="returnDate" type="date">
+                </label>
+                <label>New End Date
+                  <input id="returnEndDate" type="date">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h3>Email Labels</h3>
+                <div class="section-copy">Stored for Gmail and future Google Contacts use.</div>
+              </div>
+            </div>
+            <div id="gmailLabelPreview" class="labels-preview"></div>
+            <textarea id="gmailLabels" placeholder="Production Company&#10;Cast&#10;Current Company"></textarea>
+          </section>
+        </div>
+      </div>
+
+      <section id="systemsCard" class="card systems-card">
+        <div class="systems-summary">
+          <div>
+            <h3>Connected Systems</h3>
+            <div id="systemsSummaryText" class="section-copy">Checking this member's system connections.</div>
+          </div>
+          <button id="toggleSystems" type="button" class="btn section-toggle">Hide Details</button>
+        </div>
+        <div id="systemsDetails">
+          <div id="allConnections" class="systems-grid"></div>
+        </div>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-head">
+          <div>
+            <h3>Company History <span class="coming-soon">Coming soon</span></h3>
+            <div class="section-copy">A factual record generated automatically—not manually entered.</div>
+          </div>
+        </div>
+
+        <p class="history-intro">
+          This profile will list the person's actual work history, assignments, absences, coverage, and roles across productions.
+        </p>
+
+        <div class="history-preview">
+          <div class="history-item">
+            <div class="history-label">Performances</div>
+            <div class="history-copy">Shows worked and shows missed, with expandable dates and reasons.</div>
+          </div>
+          <div class="history-item">
+            <div class="history-label">Assignments</div>
+            <div class="history-copy">Calling, deck, office show, crew tracks, or principal role history.</div>
+          </div>
+          <div class="history-item">
+            <div class="history-label">Coverage</div>
+            <div class="history-copy">Understudy performances, substitutions, and who covered whom.</div>
+          </div>
+        </div>
+      </section>
+
+      <div id="message" class="message"></div>
+
+      <div class="bottom-bar">
+        <div class="bottom-left">
+          <button id="previewContact" class="btn">Preview Contact Sheet</button>
+          <button id="applyContact" class="btn">Apply Contact Sheet</button>
+          <button id="archiveMember" class="btn danger">Archive Member</button>
+          <button id="reactivateMember" class="btn success hidden">Reactivate Member</button>
+        </div>
+        <div class="bottom-right">
+          <button id="closeDialog" class="btn">Close</button>
+          <button id="saveMember" class="btn primary">Save Company Record</button>
+        </div>
+      </div>
     </div>
   </main>
 </div>
+
 <script>
-const S={roster:null,members:[],selected:"",filter:"All",search:""},$=id=>document.getElementById(id);
-const textFields=["memberId","status","department","roleTitle","legalName","professionalName","displayName","pronouns","publicPronouns","email","phone","address","birthday","favoriteBirthdayTreat","emergencyContactName","emergencyContactRelationship","emergencyContactPhone","allergiesPrivateNotes","headshot","startDate","endDate","returnDate"];
-const checks=["sameAsLegalName","shareEmail","sharePhone","shareAddress","shareBirthday","shareProfessionalName","sharePronouns"];
-function init(){msg("Loading CompanyOS…");google.script.run.withSuccessHandler(load).withFailureHandler(err).getCompanyOSDialogState()}
-function load(x){S.roster=x;S.members=x.members||[];fillSelect($("status"),x.statuses||[]);fillSelect($("department"),x.departments||[]);render();msg("")}
-function fillSelect(el,a){el.innerHTML="";a.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;el.appendChild(o)})}
-function render(){const out=$("roster");out.innerHTML="";const q=S.search.toLowerCase();S.members.filter(m=>(S.filter==="All"||m.status===S.filter)&&[m.displayName,m.legalName,m.professionalName,m.department,m.roleTitle].join(" ").toLowerCase().includes(q)).forEach(m=>{const b=document.createElement("button");b.type="button";b.className="person"+(m.memberId===S.selected?" selected":"");b.innerHTML='<div class="pname"></div><div class="pmeta"></div>';b.querySelector(".pname").textContent=m.displayName||m.legalName;b.querySelector(".pmeta").textContent=[m.roleTitle,m.status].filter(Boolean).join(" · ");b.onclick=()=>openMember(m.memberId);out.appendChild(b)})}
-function openMember(id){msg("Loading record…");google.script.run.withSuccessHandler(m=>{S.selected=id;fill(m);render();audit(id);msg("")}).withFailureHandler(err).getCompanyOSMember(id)}
-function fresh(){S.selected="";fill({memberId:"",status:"Active",department:"Cast",sameAsLegalName:true,mayUsePronounsPublicly:true,celebrateBirthday:true,shareEmail:true,sharePhone:true,shareAddress:false,shareBirthday:false,shareProfessionalName:true,sharePronouns:true,gmailLabels:[]});$("core").innerHTML=item("Contact Sheet","Save record first","Unavailable")+item("Google Contacts","Not connected yet","Coming next");$("connections").innerHTML=item("Secondary StageOS systems","Save record first","Later");render()}
-function fill(m){$("empty").classList.add("hidden");$("editor").classList.remove("hidden");textFields.forEach(id=>$(id).value=m[id]??"");checks.forEach(id=>$(id).checked=!!m[id]);$("mayUsePronounsPublicly").value=String(!!m.mayUsePronounsPublicly);$("celebrateBirthday").value=String(!!m.celebrateBirthday);$("gmailLabels").value=(m.gmailLabels||[]).join("\n");$("title").textContent=m.memberId?(m.displayName||m.legalName):"New company member";$("subtitle").textContent=m.memberId?[m.department,m.roleTitle].filter(Boolean).join(" · "):"Create the canonical CompanyOS record.";$("pill").textContent=m.status||"Draft";conditional()}
-function payload(){const p={};textFields.forEach(id=>p[id]=$(id).value);checks.forEach(id=>p[id]=$(id).checked);p.mayUsePronounsPublicly=$("mayUsePronounsPublicly").value==="true";p.celebrateBirthday=$("celebrateBirthday").value==="true";p.gmailLabels=$("gmailLabels").value.split(/\n|,/).map(v=>v.trim()).filter(Boolean);return p}
-function save(){msg("Saving company record…");google.script.run.withSuccessHandler(r=>{S.roster=r.roster;S.members=r.roster.members||[];S.selected=r.member.memberId;fill(r.member);render();audit(S.selected);msg("Company record saved.","success")}).withFailureHandler(err).saveCompanyOSMember(payload())}
-function audit(id){google.script.run.withSuccessHandler(a=>{$("core").innerHTML=(a.coreSync||[]).map(x=>item(x.label,x.status,x.action)).join("");$("connections").innerHTML=(a.stageOSConnections||[]).map(x=>item(x.label,x.status,x.action)).join("")}).withFailureHandler(err).getCompanyOSConnectionAudit(id)}
-function item(a,b,c){return '<div class="syncitem"><div><b>'+esc(a)+'</b><div class="muted">'+esc(b)+'</div></div><span class="chip">'+esc(c)+'</span></div>'}
-function preview(){const id=$("memberId").value;if(!id)return err(new Error("Save the company record first."));msg("Building preview…");google.script.run.withSuccessHandler(p=>{if(!p.ready)return err(new Error((p.errors||[]).join("\n")));alert(["Action: "+p.action,"Row: "+p.targetRow,p.targetSection?"Section: "+p.targetSection:"",p.targetSubsection?"Subsection: "+p.targetSubsection:"","Name: "+p.after.name,"Pronouns: "+(p.after.pronouns||"Hidden"),"Role: "+p.after.roleTitle,"Phone: "+(p.after.phone||"Hidden"),"Email: "+(p.after.email||"Hidden")].filter(Boolean).join("\n"));msg("Preview ready.","success")}).withFailureHandler(err).getCompanyOSContactSheetPreview(id)}
-function apply(){const id=$("memberId").value;if(!id)return err(new Error("Save the company record first."));if(!confirm("Apply this record to the Contact Sheet?"))return;msg("Updating Contact Sheet…");google.script.run.withSuccessHandler(r=>{audit(id);msg("Contact Sheet updated successfully.","success")}).withFailureHandler(err).applyCompanyOSContactSheetFromDialog(id)}
-function conditional(){const same=$("sameAsLegalName").checked;$("professionalName").disabled=same;if(same)$("professionalName").value=$("legalName").value;$("publicPronounsWrap").classList.toggle("hidden",$("mayUsePronounsPublicly").value==="true");$("treatWrap").classList.toggle("hidden",$("celebrateBirthday").value!=="true")}
-function msg(t,k){$("msg").textContent=t||"";$("msg").className="msg"+(k?" "+k:"")}
-function err(e){msg(e&&e.message?e.message:String(e||"Unknown error"),"error")}
-function esc(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
-$("search").oninput=e=>{S.search=e.target.value||"";render()};$("filters").onclick=e=>{const b=e.target.closest("[data-f]");if(!b)return;S.filter=b.dataset.f;document.querySelectorAll("[data-f]").forEach(x=>x.classList.toggle("active",x===b));render()};$("add").onclick=fresh;$("save").onclick=save;$("preview").onclick=preview;$("apply").onclick=apply;$("close").onclick=()=>google.script.host.close();$("sameAsLegalName").onchange=conditional;$("legalName").oninput=()=>{if($("sameAsLegalName").checked){$("professionalName").value=$("legalName").value;if(!$("displayName").value)$("displayName").value=$("legalName").value}};$("mayUsePronounsPublicly").onchange=conditional;$("celebrateBirthday").onchange=conditional;init();
+  const state = {
+    roster: null,
+    members: [],
+    selectedId: "",
+    filter: "All",
+    search: "",
+    migrationReady: false,
+    migrationBusy: false,
+    shortShowName: "Production"
+  };
+
+  const $ = id => document.getElementById(id);
+
+  const textFields = [
+    "memberId","status","department","roleTitle","legalName",
+    "professionalName","displayName","pronouns","publicPronouns",
+    "email","phone","address","birthday","favoriteBirthdayTreat",
+    "emergencyContactName","emergencyContactRelationship",
+    "emergencyContactPhone","allergiesPrivateNotes","headshot",
+    "startDate","endDate","returnDate","returnEndDate"
+  ];
+
+  const checkboxFields = [
+    "sameAsLegalName","shareEmail","sharePhone","shareAddress",
+    "shareBirthday","shareProfessionalName","sharePronouns"
+  ];
+
+  function loadProductionBranding() {
+    google.script.run
+      .withSuccessHandler(ui => {
+        const shortName =
+          ui && ui.shortShowName
+            ? String(ui.shortShowName).trim()
+            : "Production";
+
+        state.shortShowName = shortName || "Production";
+
+        const upperName =
+          ui && ui.shortShowNameUpper
+            ? String(ui.shortShowNameUpper).trim()
+            : state.shortShowName.toUpperCase();
+
+        $("productionShortName").textContent = upperName;
+        $("emptyProductionName").textContent = upperName;
+
+        $("gmailLabels").placeholder =
+          state.shortShowName +
+          " Company\nCast\nCurrent Company";
+      })
+      .withFailureHandler(error => {
+        /*
+         * Production branding is decorative and should
+         * never prevent the Company Roster from loading.
+         */
+        console.warn(
+          "Could not load production branding.",
+          error
+        );
+      })
+      .getProductionUIState();
+  }
+
+  function init() {
+    loadProductionBranding();
+    setMessage("Loading company roster...");
+    google.script.run
+      .withSuccessHandler(loadState)
+      .withFailureHandler(showError)
+      .getCompanyOSDialogState();
+  }
+
+  function loadState(data) {
+    state.roster = data || {};
+    state.members = (data && data.members) || [];
+    fillSelect($("status"), data.statuses || []);
+    fillSelect($("department"), data.departments || []);
+    renderRoster();
+    setMessage("");
+
+    if (!state.members.length) {
+      showEmpty();
+    }
+  }
+
+  function fillSelect(element, values) {
+    element.innerHTML = "";
+    values.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      element.appendChild(option);
+    });
+  }
+
+  function renderRoster() {
+    const roster = $("roster");
+    roster.innerHTML = "";
+
+    const query = state.search.trim().toLowerCase();
+
+    const visible = state.members.filter(member => {
+      const matchesFilter =
+        state.filter === "All" ||
+        member.status === state.filter;
+
+      const searchable = [
+        member.displayName,
+        member.legalName,
+        member.professionalName,
+        member.department,
+        member.roleTitle,
+        member.status
+      ].join(" ").toLowerCase();
+
+      return matchesFilter && searchable.includes(query);
+    });
+
+    visible.forEach(member => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className =
+        "person" +
+        (member.memberId === state.selectedId ? " selected" : "");
+
+      const displayName =
+        member.displayName ||
+        member.professionalName ||
+        member.legalName ||
+        "Unnamed member";
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      renderAvatar_(avatar, displayName, member.headshot);
+
+      const copy = document.createElement("div");
+      copy.className = "person-copy";
+
+      const name = document.createElement("div");
+      name.className = "person-name";
+      name.textContent = displayName;
+
+      const meta = document.createElement("div");
+      meta.className = "person-meta";
+
+      const department = displayDepartment_(
+        member.department,
+        member.roleTitle
+      );
+
+      meta.textContent = [
+        shortRoleTitle_(member.roleTitle),
+        department
+      ].filter(Boolean).join(" • ");
+
+      copy.appendChild(name);
+      copy.appendChild(meta);
+      button.appendChild(avatar);
+      button.appendChild(copy);
+      button.onclick = () => openMember(member.memberId);
+      roster.appendChild(button);
+    });
+
+    if (!visible.length) {
+      const empty = document.createElement("div");
+      empty.className = "no-results";
+      empty.textContent = state.members.length
+        ? "No roster results match this view."
+        : "No company members have been imported yet.";
+      roster.appendChild(empty);
+    }
+  }
+
+  function openMember(memberId) {
+    setMessage("Loading company record...");
+    google.script.run
+      .withSuccessHandler(member => {
+        state.selectedId = memberId;
+        fillForm(member || {});
+        renderRoster();
+        loadAudit(memberId);
+        setMessage("");
+      })
+      .withFailureHandler(showError)
+      .getCompanyOSMember(memberId);
+  }
+
+  function newMember() {
+    state.selectedId = "";
+    fillForm({
+      memberId: "",
+      status: "Active",
+      department: "Cast",
+      sameAsLegalName: false,
+      mayUsePronounsPublicly: true,
+      celebrateBirthday: true,
+      shareEmail: true,
+      sharePhone: true,
+      shareAddress: false,
+      shareBirthday: false,
+      shareProfessionalName: true,
+      sharePronouns: true,
+      gmailLabels: []
+    });
+
+    renderConnections_([{label:"Contact Sheet",status:"Save the company record first",action:"Unavailable"},{label:"Google Contacts",status:"Not connected yet",action:"Coming next"}]);
+
+    renderRoster();
+  }
+
+  function fillForm(member) {
+    $("emptyState").classList.add("hidden");
+    $("editor").classList.remove("hidden");
+
+    textFields.forEach(id => {
+      $(id).value = member[id] == null ? "" : member[id];
+    });
+
+    checkboxFields.forEach(id => {
+      $(id).checked = Boolean(member[id]);
+    });
+
+    $("mayUsePronounsPublicly").value =
+      String(Boolean(member.mayUsePronounsPublicly));
+
+    $("celebrateBirthday").value =
+      String(Boolean(member.celebrateBirthday));
+
+    $("gmailLabels").value =
+      (member.gmailLabels || []).join("\n");
+    renderGmailLabels_();
+
+    const professional = String(member.professionalName || member.legalName || "").trim();
+    $("professionalName").value = professional;
+    $("displayName").value = professional;
+    $("sameAsLegalName").checked = Boolean(member.legalName && professional === String(member.legalName).trim());
+    $("shareProfessionalName").checked = true;
+    $("shareAddress").checked = false;
+    $("returnPanel").classList.toggle("hidden", !(member.returnDate || member.returnEndDate));
+
+    const name =
+      member.displayName ||
+      member.professionalName ||
+      member.legalName ||
+      "New Company Member";
+
+    updateHero_({
+      name: name,
+      roleTitle: member.roleTitle || "",
+      department: member.department || "",
+      status: member.status || "Draft",
+      email: member.email || "",
+      phone: member.phone || "",
+      headshot: member.headshot || ""
+    });
+
+    const inactive =
+      member.status === "Inactive" ||
+      member.status === "Alumni";
+
+    $("archiveMember").classList.toggle("hidden", !member.memberId || inactive);
+    $("reactivateMember").classList.toggle("hidden", !member.memberId || !inactive);
+
+    applyConditionalFields();
+  }
+
+  function collectPayload() {
+    const payload = {};
+
+    textFields.forEach(id => {
+      payload[id] = $(id).value;
+    });
+
+    checkboxFields.forEach(id => {
+      payload[id] = $(id).checked;
+    });
+
+    payload.mayUsePronounsPublicly =
+      $("mayUsePronounsPublicly").value === "true";
+
+    payload.celebrateBirthday =
+      $("celebrateBirthday").value === "true";
+
+    payload.gmailLabels = $("gmailLabels").value
+      .split(/\n|,/)
+      .map(value => value.trim())
+      .filter(Boolean);
+
+    payload.professionalName = $("professionalName").value.trim();
+    payload.displayName = payload.professionalName || $("legalName").value.trim();
+    payload.sameAsLegalName = Boolean(
+      payload.legalName &&
+      payload.professionalName &&
+      payload.legalName.trim() === payload.professionalName.trim()
+    );
+    payload.shareProfessionalName = true;
+    payload.shareAddress = false;
+    payload.mayUsePronounsPublicly = payload.sharePronouns;
+    payload.publicPronouns = "";
+
+    return payload;
+  }
+
+  function saveMember() {
+    setMessage("Saving company record...");
+
+    google.script.run
+      .withSuccessHandler(result => {
+        state.roster = result.roster;
+        state.members = result.roster.members || [];
+        state.selectedId = result.member.memberId;
+        fillForm(result.member);
+        renderRoster();
+        loadAudit(state.selectedId);
+        setMessage("Company record saved.","success");
+      })
+      .withFailureHandler(showError)
+      .saveCompanyOSMember(collectPayload());
+  }
+
+  function loadAudit(memberId) {
+    google.script.run
+      .withSuccessHandler(audit => {
+        const items = []
+          .concat(audit.coreSync || [])
+          .concat(audit.stageOSConnections || []);
+        renderConnections_(items);
+      })
+      .withFailureHandler(showError)
+      .getCompanyOSConnectionAudit(memberId);
+  }
+
+  function renderConnections_(items) {
+    items = Array.isArray(items) ? items : [];
+    const healthy = items.length && items.every(item =>
+      /connected|up to date|healthy/i.test(String(item.status || ""))
+    );
+    const attention = items.filter(item =>
+      !/connected|up to date|healthy/i.test(String(item.status || ""))
+    );
+    const shown = healthy ? items : (attention.length ? attention : items);
+    $("allConnections").innerHTML = shown
+      .map(item => syncItem(item.label,item.status,item.action))
+      .join("");
+    $("systemsSummaryText").textContent = healthy
+      ? "All Connected Systems Are Up To Date."
+      : (attention.length + " System" + (attention.length === 1 ? " Needs" : "s Need") + " Attention.");
+    $("systemsSummaryText").classList.toggle("systems-ok", healthy);
+    if (healthy) {
+      $("systemsDetails").classList.add("hidden");
+      $("toggleSystems").textContent = "View";
+    } else {
+      $("systemsDetails").classList.remove("hidden");
+      $("toggleSystems").textContent = "Hide Details";
+    }
+  }
+
+  function renderGmailLabels_() {
+    const labels = $("gmailLabels").value
+      .split(/\n|,/)
+      .map(value => value.trim())
+      .filter(Boolean);
+    $("gmailLabelPreview").innerHTML = labels.length
+      ? labels.map(label => `<span class="label-chip">${escapeHtml(label)}</span>`).join("")
+      : '<span class="section-copy">No Email Labels Added.</span>';
+  }
+
+  function previewContactSheet() {
+    const memberId = $("memberId").value;
+    if (!memberId) {
+      showError(new Error("Save the company record first."));
+      return;
+    }
+
+    setMessage("Building Contact Sheet preview...");
+
+    google.script.run
+      .withSuccessHandler(preview => {
+        if (!preview.ready) {
+          showError(new Error((preview.errors || []).join("\n")));
+          return;
+        }
+
+        alert([
+          "Contact Sheet preview",
+          "",
+          "Action: " + preview.action,
+          "Target row: " + preview.targetRow,
+          preview.targetSection ? "Section: " + preview.targetSection : "",
+          preview.targetSubsection ? "Subsection: " + preview.targetSubsection : "",
+          "",
+          "Name: " + preview.after.name,
+          "Pronouns: " + (preview.after.pronouns || "Hidden"),
+          "Role: " + preview.after.roleTitle,
+          "Phone: " + (preview.after.phone || "Hidden"),
+          "Email: " + (preview.after.email || "Hidden")
+        ].filter(Boolean).join("\n"));
+
+        setMessage("Contact Sheet preview ready.","success");
+      })
+      .withFailureHandler(showError)
+      .getCompanyOSContactSheetPreview(memberId);
+  }
+
+  function applyContactSheet() {
+    const memberId = $("memberId").value;
+    if (!memberId) {
+      showError(new Error("Save the company record first."));
+      return;
+    }
+
+    if (!confirm(
+      "Apply this company record to the Contact Sheet?\n\n" +
+      "Only this member's reviewed Contact Sheet record will be changed."
+    )) return;
+
+    setMessage("Updating Contact Sheet...");
+
+    google.script.run
+      .withSuccessHandler(() => {
+        loadAudit(memberId);
+        setMessage("Contact Sheet updated successfully.","success");
+      })
+      .withFailureHandler(showError)
+      .applyCompanyOSContactSheetFromDialog(memberId);
+  }
+
+  function beginMigration() {
+    if (state.migrationBusy) return;
+
+    if (state.migrationReady) {
+      applyMigration();
+      return;
+    }
+
+    setMigrationBusy_(true, "Building Preview...");
+    setMessage(
+      "Building the company roster import preview. This can take about a minute...",
+      "warning"
+    );
+
+    google.script.run
+      .withSuccessHandler(result => {
+        state.migrationReady = true;
+        setMigrationBusy_(false);
+        updateMigrationButtons();
+
+        alert([
+          "Migration preview ready",
+          "",
+          "Rows found: " + result.totalRows,
+          "New records: " + result.createCount,
+          "Existing matches: " + result.updateCount,
+          "Warnings: " + result.warningCount,
+          "",
+          "Review the Company Roster Migration Preview tab in the Engine workbook.",
+          "Uncheck any record you do not want imported.",
+          "",
+          "Then return here and click Apply Reviewed Import."
+        ].join("\n"));
+
+        setMessage(
+          "Preview ready. Review the Engine workbook, then apply the checked records.",
+          "success"
+        );
+      })
+      .withFailureHandler(error => {
+        state.migrationReady = false;
+        setMigrationBusy_(false);
+        updateMigrationButtons();
+        showError(error);
+      })
+      .previewCompanyOSMigrationFromDialog();
+  }
+
+  function applyMigration() {
+    if (state.migrationBusy) return;
+
+    if (!confirm(
+      "Import every checked row from the reviewed migration preview?\n\n" +
+      "The Company Roster will be backed up before the import runs."
+    )) return;
+
+    setMigrationBusy_(true, "Applying Import...");
+    setMessage(
+      "Applying the reviewed migration. Please keep CompanyOS open...",
+      "warning"
+    );
+
+    google.script.run
+      .withSuccessHandler(result => {
+        state.roster = result.roster || {};
+        state.members = state.roster.members || [];
+        state.migrationReady = false;
+        state.migrationBusy = false;
+
+        updateMigrationButtons();
+        renderRoster();
+
+        alert([
+          "Company roster import complete",
+          "",
+          "Created: " + result.result.created,
+          "Updated: " + result.result.updated,
+          "Skipped: " + result.result.skipped,
+          "Failed: " + result.result.failed
+        ].join("\n"));
+
+        setMessage(
+          "Import complete. The Company Roster is now populated from the reviewed records.",
+          "success"
+        );
+
+        if (state.members.length) {
+          const nextId =
+            state.selectedId &&
+            state.members.some(member => member.memberId === state.selectedId)
+              ? state.selectedId
+              : state.members[0].memberId;
+
+          openMember(nextId);
+        } else {
+          showEmpty();
+        }
+      })
+      .withFailureHandler(error => {
+        setMigrationBusy_(false);
+        updateMigrationButtons();
+        showError(error);
+      })
+      .executeCompanyOSMigrationFromDialog();
+  }
+
+  function updateMigrationButtons() {
+    let label = "Import Contact Sheet";
+
+    if (state.migrationBusy) {
+      label = state.migrationReady
+        ? "Applying Import..."
+        : "Building Preview...";
+    } else if (state.migrationReady) {
+      label = "Apply Reviewed Import";
+    }
+
+    ["importContactSheet", "emptyImport"].forEach(id => {
+      const button = $(id);
+      button.textContent = label;
+      button.disabled = state.migrationBusy;
+    });
+  }
+
+  function setMigrationBusy_(isBusy, label) {
+    state.migrationBusy = Boolean(isBusy);
+
+    ["importContactSheet", "emptyImport"].forEach(id => {
+      const button = $(id);
+      button.disabled = state.migrationBusy;
+
+      if (state.migrationBusy && label) {
+        button.textContent = label;
+      }
+    });
+
+    $("addMember").disabled = state.migrationBusy;
+    $("emptyAdd").disabled = state.migrationBusy;
+  }
+
+  function archiveMember() {
+    const memberId = $("memberId").value;
+    if (!memberId) return;
+
+    if (!confirm(
+      "Archive this company member?\n\n" +
+      "The record will remain in the Company Roster and can be reactivated later."
+    )) return;
+
+    setMessage("Archiving company member...");
+
+    google.script.run
+      .withSuccessHandler(result => {
+        state.roster = result.roster;
+        state.members = result.roster.members || [];
+        state.selectedId = result.member.memberId;
+        fillForm(result.member);
+        renderRoster();
+        loadAudit(state.selectedId);
+        setMessage("Company member archived.","success");
+      })
+      .withFailureHandler(showError)
+      .archiveCompanyOSMember(memberId);
+  }
+
+  function reactivateMember() {
+    const memberId = $("memberId").value;
+    if (!memberId) return;
+
+    setMessage("Reactivating company member...");
+
+    google.script.run
+      .withSuccessHandler(result => {
+        state.roster = result.roster;
+        state.members = result.roster.members || [];
+        state.selectedId = result.member.memberId;
+        fillForm(result.member);
+        renderRoster();
+        loadAudit(state.selectedId);
+        setMessage("Company member reactivated.","success");
+      })
+      .withFailureHandler(showError)
+      .reactivateCompanyOSMember(memberId);
+  }
+
+  function applyConditionalFields() {
+    $("treatWrap").classList.toggle(
+      "hidden",
+      $("celebrateBirthday").value !== "true"
+    );
+  }
+
+  function refreshHeroFromForm_() {
+    updateHero_({
+      name:
+        $("professionalName").value.trim() ||
+        $("legalName").value.trim() ||
+        "New Company Member",
+      roleTitle: $("roleTitle").value.trim(),
+      department: $("department").value,
+      status: $("status").value || "Draft",
+      email: $("email").value.trim(),
+      phone: $("phone").value.trim(),
+      headshot: $("headshot").value.trim()
+    });
+  }
+
+  function updateHero_(data) {
+    const department = displayDepartment_(
+      data.department,
+      data.roleTitle
+    );
+
+    $("heroName").textContent =
+      data.name || "New Company Member";
+
+    $("roleTitle").value = data.roleTitle || "";
+    if (data.department) $("department").value = data.department;
+    if (data.status) $("status").value = data.status;
+
+    $("heroEmail").textContent =
+      data.email ? "Email: " + data.email : "";
+
+    $("heroPhone").textContent =
+      data.phone ? "Phone: " + data.phone : "";
+
+    renderAvatar_(
+      $("heroAvatar"),
+      data.name,
+      data.headshot
+    );
+
+
+  }
+
+  function renderAvatar_(element, name, headshot) {
+    if (!element) return;
+
+    const initials = initialsForName_(name);
+    const photoUrl = photoUrl_(headshot);
+
+    element.innerHTML = "";
+    element.textContent = initials;
+
+    if (!photoUrl) return;
+
+    const image = document.createElement("img");
+    image.alt = name ? name + " profile photo" : "Profile photo";
+    image.src = photoUrl;
+    image.onload = () => {
+      element.textContent = "";
+      element.appendChild(image);
+    };
+    image.onerror = () => {
+      element.innerHTML = "";
+      element.textContent = initials;
+    };
+  }
+
+  function initialsForName_(name) {
+    const words = String(name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!words.length) return "—";
+    if (words.length === 1) {
+      return words[0].slice(0,2).toUpperCase();
+    }
+
+    return (
+      words[0].charAt(0) +
+      words[words.length - 1].charAt(0)
+    ).toUpperCase();
+  }
+
+  function photoUrl_(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    if (/^https?:\/\//i.test(raw)) {
+      const driveId = extractDriveFileId_(raw);
+      return driveId
+        ? "https://drive.google.com/thumbnail?id=" +
+          encodeURIComponent(driveId) +
+          "&sz=w400"
+        : raw;
+    }
+
+    if (/^[A-Za-z0-9_-]{20,}$/.test(raw)) {
+      return "https://drive.google.com/thumbnail?id=" +
+        encodeURIComponent(raw) +
+        "&sz=w400";
+    }
+
+    return "";
+  }
+
+  function extractDriveFileId_(value) {
+    const patterns = [
+      /\/file\/d\/([A-Za-z0-9_-]+)/i,
+      /[?&]id=([A-Za-z0-9_-]+)/i,
+      /\/d\/([A-Za-z0-9_-]+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = String(value || "").match(pattern);
+      if (match && match[1]) return match[1];
+    }
+
+    return "";
+  }
+
+  function displayDepartment_(department, roleTitle) {
+    const role = String(roleTitle || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g," ")
+      .trim();
+
+    const stageManagementRoles = [
+      "production stage manager",
+      "assistant stage manager",
+      "deck stage manager",
+      "stage manager",
+      "psm",
+      "asm"
+    ];
+
+    const isStageManagement = stageManagementRoles.some(value =>
+      role === value ||
+      role.includes(value)
+    );
+
+    return isStageManagement
+      ? "Stage Management"
+      : String(department || "").trim();
+  }
+
+  function shortRoleTitle_(roleTitle) {
+    const raw = String(roleTitle || "").trim();
+    const normalized = raw.toLowerCase();
+
+    const abbreviations = {
+      "production stage manager": "PSM",
+      "assistant stage manager": "ASM",
+      "deck stage manager": "Deck SM",
+      "stage manager": "SM",
+      "assistant company manager": "ACM",
+      "company manager": "CM"
+    };
+
+    return abbreviations[normalized] || raw;
+  }
+
+  function showEmpty() {
+    $("emptyState").classList.remove("hidden");
+    $("editor").classList.add("hidden");
+  }
+
+  function syncItem(label,status,action) {
+    return `
+      <div class="sync-item">
+        <div style="min-width:0">
+          <div class="sync-label">${escapeHtml(label)}</div>
+          <div class="sync-status">${escapeHtml(status)}</div>
+        </div>
+        <div class="tag">${escapeHtml(action)}</div>
+      </div>`;
+  }
+
+  function setMessage(text,type) {
+    $("message").textContent = text || "";
+    $("message").className = "message" + (type ? " " + type : "");
+  }
+
+  function showError(error) {
+    const message =
+      error && error.message
+        ? error.message
+        : String(error || "Unknown company roster error.");
+
+    setMessage(message,"error");
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#039;");
+  }
+
+  $("search").oninput = event => {
+    state.search = event.target.value || "";
+    renderRoster();
+  };
+
+  $("filters").onclick = event => {
+    const button = event.target.closest("[data-filter]");
+    if (!button) return;
+
+    state.filter = button.dataset.filter;
+
+    document.querySelectorAll("[data-filter]").forEach(item => {
+      item.classList.toggle("active", item === button);
+    });
+
+    renderRoster();
+  };
+
+  $("addMember").onclick = newMember;
+  $("emptyAdd").onclick = newMember;
+  $("importContactSheet").onclick = beginMigration;
+  $("emptyImport").onclick = beginMigration;
+  $("saveMember").onclick = saveMember;
+  $("previewContact").onclick = previewContactSheet;
+  $("applyContact").onclick = applyContactSheet;
+  $("archiveMember").onclick = archiveMember;
+  $("reactivateMember").onclick = reactivateMember;
+  $("closeDialog").onclick = () => google.script.host.close();
+
+  $("legalName").oninput = () => {
+    if (!$("professionalName").value.trim()) {
+      $("professionalName").value = $("legalName").value;
+    }
+    refreshHeroFromForm_();
+  };
+
+  [
+    "professionalName",
+    "roleTitle",
+    "email",
+    "phone"
+  ].forEach(id => {
+    $(id).oninput = refreshHeroFromForm_;
+  });
+
+  $("status").onchange = refreshHeroFromForm_;
+  $("department").onchange = refreshHeroFromForm_;
+  $("celebrateBirthday").onchange = applyConditionalFields;
+  $("gmailLabels").oninput = renderGmailLabels_;
+
+  $("toggleReturn").onclick = () => {
+    const panel = $("returnPanel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) $("returnDate").focus();
+  };
+
+  $("toggleSystems").onclick = () => {
+    const details = $("systemsDetails");
+    details.classList.toggle("hidden");
+    $("toggleSystems").textContent = details.classList.contains("hidden") ? "View" : "Hide Details";
+  };
+
+  $("editHeroPhoto").onclick = () => {
+    google.script.run
+      .withFailureHandler(showError)
+      .openCompanyOSHeadshotManager();
+  };
+
+  init();
 </script>
 </body>
 </html>
