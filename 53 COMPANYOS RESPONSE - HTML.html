@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #202124;
+      --muted: #687078;
+      --line: #dfe3ea;
+      --blue: #2457c5;
+      --blue-light: #edf3ff;
+      --green: #168346;
+      --green-light: #eaf7ef;
+      --yellow: #9a6700;
+      --yellow-light: #fff7dc;
+      --red: #b3261e;
+      --red-light: #fceceb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+    }
+
+    button,
+    input {
+      font-family: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 18px 22px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0 0 5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .header-buttons {
+      display: flex;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 10px 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .primary {
+      background: var(--blue);
+      color: white;
+    }
+
+    .secondary {
+      background: #e8eaed;
+      color: var(--text);
+    }
+
+    .content {
+      flex: 1;
+      padding: 18px 22px 95px;
+      overflow-y: auto;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 13px;
+    }
+
+    .summary-value {
+      font-size: 23px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .toolbar {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .selection-count {
+      font-weight: 700;
+      color: var(--blue);
+    }
+
+    .text-button {
+      padding: 4px;
+      background: transparent;
+      color: var(--blue);
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 19px 0 9px;
+    }
+
+    .person-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      margin-bottom: 11px;
+      overflow: hidden;
+    }
+
+    .person-header {
+      padding: 13px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      cursor: pointer;
+    }
+
+    .person-header:hover {
+      background: #fafbfc;
+    }
+
+    .person-heading {
+      min-width: 0;
+    }
+
+    .person-name {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 3px;
+    }
+
+    .person-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .person-right {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge-blue {
+      color: var(--blue);
+      background: var(--blue-light);
+    }
+
+    .badge-green {
+      color: var(--green);
+      background: var(--green-light);
+    }
+
+    .badge-yellow {
+      color: var(--yellow);
+      background: var(--yellow-light);
+    }
+
+    .badge-red {
+      color: var(--red);
+      background: var(--red-light);
+    }
+
+    .chevron {
+      font-size: 17px;
+      color: var(--muted);
+      transition: transform 0.15s ease;
+    }
+
+    .person-card.open .chevron {
+      transform: rotate(180deg);
+    }
+
+    .changes {
+      display: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .person-card.open .changes {
+      display: block;
+    }
+
+    .change-row {
+      display: grid;
+      grid-template-columns: 34px 215px 1fr 38px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 15px;
+      border-bottom: 1px solid #edf0f4;
+    }
+
+    .change-row:last-child {
+      border-bottom: 0;
+    }
+
+    .change-check {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .field-name {
+      font-weight: 700;
+    }
+
+    .value-box {
+      border-radius: 8px;
+      padding: 8px 10px;
+      min-height: 34px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .old-value {
+      background: #f3f4f6;
+      color: #596068;
+    }
+
+    .new-value {
+      background: var(--green-light);
+      color: #145c35;
+      font-weight: 700;
+    }
+
+    .arrow {
+      text-align: center;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .empty-state {
+      background: var(--card);
+      border: 1px dashed #c8cdd5;
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .notice-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 13px 15px;
+      margin-bottom: 9px;
+    }
+
+    .notice-title {
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .notice-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      background: var(--card);
+      border-top: 1px solid var(--line);
+      padding: 13px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .footer-status {
+      color: var(--muted);
+    }
+
+    .footer-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(246, 247, 251, 0.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loading-overlay.visible {
+      display: flex;
+    }
+
+    .loading-card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      padding: 22px 28px;
+      font-weight: 800;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.13);
+    }
+
+    .result-banner {
+      display: none;
+      margin-bottom: 14px;
+      border-radius: 11px;
+      padding: 13px 15px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .result-banner.visible {
+      display: block;
+    }
+
+    .result-success {
+      background: var(--green-light);
+      color: #145c35;
+      border: 1px solid #b9e2c9;
+    }
+
+    .result-warning {
+      background: var(--yellow-light);
+      color: #765100;
+      border: 1px solid #ead48b;
+    }
+
+    .result-error {
+      background: var(--red-light);
+      color: var(--red);
+      border: 1px solid #efc0bc;
+    }
+
+    @media (max-width: 850px) {
+      .summary-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .change-row {
+        grid-template-columns: 34px 1fr;
+      }
+
+      .field-name {
+        grid-column: 2;
+      }
+
+      .value-box,
+      .arrow {
+        grid-column: 2;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="title-row">
+        <div>
+          <h1>CompanyOS Response Sync</h1>
+          <div class="subtitle">
+            Review each proposed update before anything changes in
+            CompanyOS People.
+          </div>
+        </div>
+
+        <div class="header-buttons">
+          <button
+            class="secondary"
+            onclick="refreshPreview()"
+          >
+            Refresh Preview
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div id="resultBanner" class="result-banner"></div>
+
+      <div id="summaryGrid" class="summary-grid"></div>
+
+      <div id="toolbar" class="toolbar">
+        <div class="toolbar-left">
+          <span
+            id="selectionCount"
+            class="selection-count"
+          ></span>
+
+          <button
+            class="text-button"
+            onclick="selectAll(true)"
+          >
+            Select All
+          </button>
+
+          <button
+            class="text-button"
+            onclick="selectAll(false)"
+          >
+            Clear All
+          </button>
+        </div>
+
+        <div class="toolbar-right">
+          <label>
+            <input
+              id="onlyChanges"
+              type="checkbox"
+              checked
+              onchange="render()"
+            >
+            Hide unchanged people
+          </label>
+        </div>
+      </div>
+
+      <div id="mainContent"></div>
+    </main>
+
+    <footer class="footer">
+      <div id="footerStatus" class="footer-status">
+        Loading response preview…
+      </div>
+
+      <div class="footer-buttons">
+        <button
+          class="secondary"
+          onclick="google.script.host.close()"
+        >
+          Cancel
+        </button>
+
+        <button
+          id="applyButton"
+          class="primary"
+          onclick="applySelectedChanges()"
+          disabled
+        >
+          Apply Selected Changes
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay">
+    <div id="loadingText" class="loading-card">
+      Working…
+    </div>
+  </div>
+
+  <script>
+    let payload =
+      <?!= JSON.stringify(initialPayload) ?>;
+
+    let selectedChangeIds = new Set();
+
+    initializeSelection();
+    render();
+
+
+    function initializeSelection() {
+      selectedChangeIds = new Set();
+
+      (payload.people || []).forEach(function(person) {
+        (person.changes || []).forEach(function(change) {
+          if (change.selectedByDefault) {
+            selectedChangeIds.add(change.changeId);
+          }
+        });
+      });
+    }
+
+
+    function render() {
+      renderSummary();
+      renderMainContent();
+      updateSelectionUI();
+    }
+
+
+    function renderSummary() {
+      const summary = payload.summary || {};
+
+      const cards = [
+        {
+          value: summary.latestResponses || 0,
+          label: "Newest responses"
+        },
+        {
+          value: summary.matchedPeople || 0,
+          label: "Matched members"
+        },
+        {
+          value: summary.peopleWithChanges || 0,
+          label: "Members with changes"
+        },
+        {
+          value: summary.totalChanges || 0,
+          label: "Proposed field changes"
+        },
+        {
+          value: summary.unmatchedResponses || 0,
+          label: "Unmatched responses"
+        },
+        {
+          value:
+            (summary.duplicateSubmissions || 0) +
+            (summary.ambiguousResponses || 0),
+          label: "Warnings"
+        }
+      ];
+
+      document.getElementById("summaryGrid").innerHTML =
+        cards.map(function(card) {
+          return `
+            <div class="summary-card">
+              <div class="summary-value">
+                ${escapeHtml(card.value)}
+              </div>
+              <div class="summary-label">
+                ${escapeHtml(card.label)}
+              </div>
+            </div>
+          `;
+        }).join("");
+    }
+
+
+    function renderMainContent() {
+      const container =
+        document.getElementById("mainContent");
+
+      const hideUnchanged =
+        document.getElementById("onlyChanges").checked;
+
+      const visiblePeople =
+        (payload.people || []).filter(function(person) {
+          return !hideUnchanged || person.changes.length > 0;
+        });
+
+      let html = "";
+
+      html += `
+        <div class="section-title">
+          Member Updates
+        </div>
+      `;
+
+      if (!visiblePeople.length) {
+        html += `
+          <div class="empty-state">
+            No member changes need to be reviewed.
+          </div>
+        `;
+      } else {
+        html += visiblePeople
+          .map(renderPersonCard)
+          .join("");
+      }
+
+      if ((payload.unmatched || []).length) {
+        html += `
+          <div class="section-title">
+            Unmatched Responses
+          </div>
+        `;
+
+        html += payload.unmatched
+          .map(function(item) {
+            return `
+              <div class="notice-card">
+                <div class="notice-title">
+                  ⚠ ${escapeHtml(responseLabel(item))}
+                </div>
+                <div class="notice-meta">
+                  ${escapeHtml(item.email || "No email")}
+                  <br>
+                  Submitted ${escapeHtml(item.timestamp || "")}
+                  <br>
+                  No CompanyOS member was changed.
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      if ((payload.ambiguous || []).length) {
+        html += `
+          <div class="section-title">
+            Ambiguous Matches
+          </div>
+        `;
+
+        html += payload.ambiguous
+          .map(function(item) {
+            const choices = (item.possibleMatches || [])
+              .map(function(match) {
+                return escapeHtml(match.name);
+              })
+              .join(", ");
+
+            return `
+              <div class="notice-card">
+                <div class="notice-title">
+                  ⚠ ${escapeHtml(responseLabel(item))}
+                </div>
+                <div class="notice-meta">
+                  Possible matches: ${choices}
+                  <br>
+                  This response was not applied automatically.
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      if ((payload.duplicates || []).length) {
+        html += `
+          <div class="section-title">
+            Duplicate Submissions
+          </div>
+        `;
+
+        html += payload.duplicates
+          .map(function(item) {
+            return `
+              <div class="notice-card">
+                <div class="notice-title">
+                  ${escapeHtml(item.person)}
+                </div>
+                <div class="notice-meta">
+                  Using newest response from
+                  ${escapeHtml(item.newestTimestamp || "")}.
+                  ${item.ignoredSubmissions.length}
+                  older submission${item.ignoredSubmissions.length === 1 ? "" : "s"}
+                  ignored.
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      container.innerHTML = html;
+    }
+
+
+    function renderPersonCard(person, index) {
+      const changeCount = person.changes.length;
+
+      const badgeClass =
+        changeCount > 0
+          ? "badge-blue"
+          : "badge-green";
+
+      const badgeText =
+        changeCount > 0
+          ? changeCount +
+            " change" +
+            (changeCount === 1 ? "" : "s")
+          : "No changes";
+
+      const changeRows =
+        changeCount > 0
+          ? person.changes.map(renderChangeRow).join("")
+          : `
+              <div class="empty-state">
+                The newest response already matches CompanyOS.
+              </div>
+            `;
+
+      return `
+        <div
+          class="person-card ${changeCount > 0 ? "open" : ""}"
+          id="person-${escapeAttribute(person.memberId)}"
+        >
+          <div
+            class="person-header"
+            onclick="togglePerson('${escapeJs(person.memberId)}')"
+          >
+            <div class="person-heading">
+              <div class="person-name">
+                ${escapeHtml(person.personName)}
+              </div>
+
+              <div class="person-meta">
+                Matched by ${escapeHtml(person.matchMethod)}
+                • Response ${escapeHtml(person.responseTimestamp || "")}
+              </div>
+            </div>
+
+            <div class="person-right">
+              <span class="badge ${badgeClass}">
+                ${badgeText}
+              </span>
+
+              <span class="chevron">⌄</span>
+            </div>
+          </div>
+
+          <div class="changes">
+            ${changeRows}
+          </div>
+        </div>
+      `;
+    }
+
+
+    function renderChangeRow(change) {
+      const checked =
+        selectedChangeIds.has(change.changeId);
+
+      return `
+        <div class="change-row">
+          <input
+            class="change-check"
+            type="checkbox"
+            data-change-id="${escapeAttribute(change.changeId)}"
+            ${checked ? "checked" : ""}
+            onchange="toggleChange(
+              '${escapeJs(change.changeId)}',
+              this.checked
+            )"
+          >
+
+          <div class="field-name">
+            ${escapeHtml(change.field)}
+          </div>
+
+          <div class="value-box old-value">
+            ${formatValue(change.oldDisplay)}
+          </div>
+
+          <div class="arrow">→</div>
+
+          <div class="value-box new-value">
+            ${formatValue(change.newDisplay)}
+          </div>
+        </div>
+      `;
+    }
+
+
+    function togglePerson(memberId) {
+      const element = document.getElementById(
+        "person-" + memberId
+      );
+
+      if (element) {
+        element.classList.toggle("open");
+      }
+    }
+
+
+    function toggleChange(changeId, checked) {
+      if (checked) {
+        selectedChangeIds.add(changeId);
+      } else {
+        selectedChangeIds.delete(changeId);
+      }
+
+      updateSelectionUI();
+    }
+
+
+    function selectAll(shouldSelect) {
+      selectedChangeIds = new Set();
+
+      if (shouldSelect) {
+        (payload.people || []).forEach(function(person) {
+          (person.changes || []).forEach(function(change) {
+            selectedChangeIds.add(change.changeId);
+          });
+        });
+      }
+
+      render();
+    }
+
+
+    function updateSelectionUI() {
+      const count = selectedChangeIds.size;
+
+      document.getElementById("selectionCount").textContent =
+        count +
+        " change" +
+        (count === 1 ? "" : "s") +
+        " selected";
+
+      document.getElementById("footerStatus").textContent =
+        count
+          ? "Only selected changes will be written."
+          : "Nothing is selected.";
+
+      document.getElementById("applyButton").disabled =
+        count === 0;
+    }
+
+
+    function applySelectedChanges() {
+      const changes = [];
+
+      (payload.people || []).forEach(function(person) {
+        (person.changes || []).forEach(function(change) {
+          if (!selectedChangeIds.has(change.changeId)) {
+            return;
+          }
+
+          changes.push({
+            memberId: change.memberId,
+            personName: change.personName,
+            responseId: change.responseId,
+            field: change.field,
+            expectedOldValue: change.expectedOldValue,
+            newValue: change.newValue,
+            valueType: change.valueType
+          });
+        });
+      });
+
+      if (!changes.length) {
+        return;
+      }
+
+      const message =
+        "Apply " +
+        changes.length +
+        " selected CompanyOS change" +
+        (changes.length === 1 ? "" : "s") +
+        "?";
+
+      if (!window.confirm(message)) {
+        return;
+      }
+
+      showLoading("Applying approved changes…");
+      clearResult();
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+
+          let resultClass = "result-success";
+          let resultText =
+            result.appliedCount +
+            " change" +
+            (result.appliedCount === 1 ? "" : "s") +
+            " applied.";
+
+          if (result.conflictCount) {
+            resultClass = "result-warning";
+            resultText +=
+              " " +
+              result.conflictCount +
+              " change" +
+              (result.conflictCount === 1 ? "" : "s") +
+              " could not be applied because CompanyOS changed after the preview was opened.";
+          }
+
+          showResult(resultText, resultClass);
+          refreshPreview(false);
+        })
+        .withFailureHandler(handleFailure)
+        .companyOSApplyResponseChanges({
+          changes: changes
+        });
+    }
+
+
+    function refreshPreview(showOverlay = true) {
+      if (showOverlay) {
+        showLoading("Refreshing response preview…");
+      }
+
+      google.script.run
+        .withSuccessHandler(function(newPayload) {
+          hideLoading();
+
+          payload = newPayload;
+          initializeSelection();
+          render();
+        })
+        .withFailureHandler(handleFailure)
+        .companyOSRefreshResponsePreview();
+    }
+
+
+    function handleFailure(error) {
+      hideLoading();
+
+      const message =
+        error && error.message
+          ? error.message
+          : String(error || "Unknown error");
+
+      showResult(message, "result-error");
+    }
+
+
+    function showLoading(message) {
+      document.getElementById("loadingText").textContent =
+        message || "Working…";
+
+      document
+        .getElementById("loadingOverlay")
+        .classList.add("visible");
+    }
+
+
+    function hideLoading() {
+      document
+        .getElementById("loadingOverlay")
+        .classList.remove("visible");
+    }
+
+
+    function showResult(message, className) {
+      const banner =
+        document.getElementById("resultBanner");
+
+      banner.className =
+        "result-banner visible " + className;
+
+      banner.textContent = message;
+    }
+
+
+    function clearResult() {
+      const banner =
+        document.getElementById("resultBanner");
+
+      banner.className = "result-banner";
+      banner.textContent = "";
+    }
+
+
+    function responseLabel(item) {
+      return (
+        item.professionalName ||
+        item.legalName ||
+        item.email ||
+        "Unknown Response"
+      );
+    }
+
+
+    function formatValue(value) {
+      const text =
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+          ? "Blank"
+          : String(value);
+
+      return escapeHtml(text).replace(/\n/g, "<br>");
+    }
+
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+
+
+    function escapeJs(value) {
+      return String(value ?? "")
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, "\\r")
+        .replace(/\n/g, "\\n");
+    }
+  </script>
+</body>
+</html>
