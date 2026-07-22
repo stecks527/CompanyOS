@@ -1,0 +1,1774 @@
+/*************************************************
+ * 53 COMPANYOS RESPONSE - CORE
+ *
+ * Form Responses 1
+ *      ↓
+ * Preview changes
+ *      ↓
+ * Apply approved changes
+ *      ↓
+ * CompanyOS Sync Log
+ *************************************************/
+
+const COMPANYOS_RESPONSE = Object.freeze({
+  PEOPLE_SHEET_NAME: "CompanyOS People",
+  RESPONSE_RESOURCE_SETTING: "Emergency Info Form",
+  RESPONSE_SHEET_NAME: "Form Responses 1",
+  LOG_SHEET_NAME: "CompanyOS Sync Log",
+  SETTINGS_SHEET_NAME: "Production Settings",
+
+  DIALOG_TITLE: "CompanyOS Response Sync",
+  DIALOG_WIDTH: 1100,
+  DIALOG_HEIGHT: 760,
+
+  PEOPLE_HEADERS: Object.freeze({
+    MEMBER_ID: "Member ID",
+    LEGAL_NAME: "Legal Name",
+    PROFESSIONAL_NAME: "Professional / Union Name",
+    DISPLAY_NAME: "Display Name",
+    PRONOUNS: "Pronouns",
+    MAY_USE_PRONOUNS_PUBLICLY: "May Use Pronouns Publicly",
+    PUBLIC_PRONOUNS: "Public Pronouns / Alternate Language",
+    EMAIL: "Email",
+    PHONE: "Phone",
+    ADDRESS: "Address",
+    BIRTHDAY: "Birthday",
+    CELEBRATE_BIRTHDAY: "Celebrate Birthday",
+    FAVORITE_BIRTHDAY_TREAT: "Favorite Birthday Treat",
+    EMERGENCY_CONTACT_NAME: "Emergency Contact Name",
+    EMERGENCY_CONTACT_RELATIONSHIP: "Emergency Contact Relationship",
+    EMERGENCY_CONTACT_PHONE: "Emergency Contact Phone",
+    ALLERGIES: "Allergies / Private SM Notes",
+    SHARE_EMAIL: "Share Email",
+    SHARE_PHONE: "Share Phone",
+    SHARE_ADDRESS: "Share Address",
+    SHARE_BIRTHDAY: "Share Birthday",
+    SHARE_PROFESSIONAL_NAME: "Share Professional Name",
+    SHARE_PRONOUNS: "Share Pronouns"
+  }),
+
+  FORM_HEADERS: Object.freeze({
+    TIMESTAMP: "Timestamp",
+    LEGAL_NAME: "Legal Name",
+    PROFESSIONAL_NAME: "Professional / Union Name",
+    PRONOUNS: "Pronouns (if comfortable)",
+    PUBLIC_PRONOUN_PERMISSION:
+      "May we use these pronouns publicly? If no, what should we use instead?",
+    EMAIL: "Email",
+    PHONE: "Phone number",
+    SHARING:
+      "Please indicate what you are comfortable having shared publicly (Contact Sheet)",
+    ADDRESS: "Address",
+    BIRTHDAY: "Birthday",
+    CELEBRATE_BIRTHDAY:
+      "Would you like to celebrate with the company?",
+    FAVORITE_BIRTHDAY_TREAT:
+      "What is your favorite birthday treat?",
+    EMERGENCY_CONTACT_NAME: "Emergency Contact Name",
+    EMERGENCY_CONTACT_RELATIONSHIP:
+      "Emergency Contact Relationship to You",
+    EMERGENCY_CONTACT_PHONE:
+      "Emergency Contact Phone Number",
+    ALLERGIES:
+      "Do you have any allergies (including food) that stage management should know?"
+  })
+});
+
+
+/*************************************************
+ * SETTINGS + SOURCE HELPERS
+ *************************************************/
+
+function companyOSResponseGetSetting_(settingName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const settingsSheet = ss.getSheetByName(
+    COMPANYOS_RESPONSE.SETTINGS_SHEET_NAME
+  );
+
+  if (!settingsSheet) {
+    throw new Error(
+      'Could not find the "' +
+        COMPANYOS_RESPONSE.SETTINGS_SHEET_NAME +
+        '" sheet.'
+    );
+  }
+
+  const values = settingsSheet.getDataRange().getDisplayValues();
+  const wanted = companyOSResponseNormalizeSettingLabel_(settingName);
+
+  for (let row = 0; row < values.length; row++) {
+    for (let column = 0; column < values[row].length; column++) {
+      const currentLabel =
+        companyOSResponseNormalizeSettingLabel_(values[row][column]);
+
+      if (currentLabel !== wanted) continue;
+
+      const settingValue =
+        column + 1 < values[row].length
+          ? String(values[row][column + 1] || "").trim()
+          : "";
+
+      if (!settingValue) {
+        throw new Error(
+          'The Settings entry "' +
+            settingName +
+            '" does not have a value in the cell immediately to its right.'
+        );
+      }
+
+      return settingValue;
+    }
+  }
+
+  throw new Error(
+    'Could not find the Settings entry "' + settingName + '".'
+  );
+}
+
+
+function companyOSResponseNormalizeSettingLabel_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+
+function companyOSResponseExtractGoogleId_(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+
+  const documentMatch = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (documentMatch) return documentMatch[1];
+
+  const folderMatch = text.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return folderMatch[1];
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) return text;
+
+  throw new Error(
+    "Could not extract a Google resource ID from:\n" + text
+  );
+}
+
+
+function companyOSResponseGetSources_() {
+  const mainSS = SpreadsheetApp.getActiveSpreadsheet();
+
+  const engineResource = companyOSResponseGetSetting_(
+    "Engine Workbook"
+  );
+
+  const responseResource = companyOSResponseGetSetting_(
+    COMPANYOS_RESPONSE.RESPONSE_RESOURCE_SETTING
+  );
+
+  const engineSpreadsheetId =
+    companyOSResponseExtractGoogleId_(engineResource);
+
+  const responseSpreadsheetId =
+    companyOSResponseExtractGoogleId_(responseResource);
+
+  let engineSS;
+  let responseSS;
+
+  try {
+    engineSS = SpreadsheetApp.openById(
+      engineSpreadsheetId
+    );
+  } catch (error) {
+    throw new Error(
+      'Could not open the spreadsheet listed under "Engine Workbook" in Settings.\n\n' +
+        (error && error.message ? error.message : error)
+    );
+  }
+
+  try {
+    responseSS = SpreadsheetApp.openById(
+      responseSpreadsheetId
+    );
+  } catch (error) {
+    throw new Error(
+      'Could not open the spreadsheet listed under "' +
+        COMPANYOS_RESPONSE.RESPONSE_RESOURCE_SETTING +
+        '" in Settings.\n\n' +
+        (error && error.message ? error.message : error)
+    );
+  }
+
+  const peopleSheet = engineSS.getSheetByName(
+    COMPANYOS_RESPONSE.PEOPLE_SHEET_NAME
+  );
+
+  if (!peopleSheet) {
+    throw new Error(
+      'Could not find "' +
+        COMPANYOS_RESPONSE.PEOPLE_SHEET_NAME +
+        '" in the Engine workbook.'
+    );
+  }
+
+  const responseSheet = responseSS.getSheetByName(
+    COMPANYOS_RESPONSE.RESPONSE_SHEET_NAME
+  );
+
+  if (!responseSheet) {
+    throw new Error(
+      'Could not find "' +
+        COMPANYOS_RESPONSE.RESPONSE_SHEET_NAME +
+        '" in the Emergency Info Form workbook.'
+    );
+  }
+
+  return {
+    mainSS: mainSS,
+    companySS: engineSS,
+    engineSS: engineSS,
+    peopleSheet: peopleSheet,
+    responseSS: responseSS,
+    responseSheet: responseSheet
+  };
+}
+
+/**
+ * Add this item to your existing CompanyOS menu.
+ *
+ * Example:
+ * menu.addItem(
+ *   "Sync Responses",
+ *   "companyOSOpenResponseSync"
+ * );
+ */
+function companyOSOpenResponseSync() {
+  const template = HtmlService.createTemplateFromFile(
+    "53 COMPANYOS RESPONSE - HTML"
+  );
+
+  template.initialPayload = companyOSBuildResponsePreview_();
+
+  const html = template
+    .evaluate()
+    .setWidth(COMPANYOS_RESPONSE.DIALOG_WIDTH)
+    .setHeight(COMPANYOS_RESPONSE.DIALOG_HEIGHT);
+
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    COMPANYOS_RESPONSE.DIALOG_TITLE
+  );
+}
+
+
+/**
+ * Optional standalone test launcher.
+ */
+function companyOSTestResponseSync() {
+  companyOSOpenResponseSync();
+}
+
+
+/**
+ * Called by the HTML when Refresh Preview is clicked.
+ */
+function companyOSRefreshResponsePreview() {
+  return companyOSBuildResponsePreview_();
+}
+
+
+/**
+ * Builds the entire preview payload.
+ */
+function companyOSBuildResponsePreview_() {
+  const sources = companyOSResponseGetSources_();
+
+  const peopleSheet = sources.peopleSheet;
+  const responseSheet = sources.responseSheet;
+
+  const peopleTable = companyOSResponseReadTable_(peopleSheet);
+  const responseTable = companyOSResponseReadTable_(responseSheet);
+
+  companyOSResponseValidatePeopleHeaders_(peopleTable.headerMap);
+  companyOSResponseValidateFormHeaders_(responseTable.headerMap);
+
+  const people = companyOSResponseBuildPeople_(
+    peopleTable.rows,
+    peopleTable.headerMap
+  );
+
+  const responses = companyOSResponseBuildResponses_(
+    responseTable.rows,
+    responseTable.headerMap
+  );
+
+  const latestResult =
+    companyOSResponseKeepLatestResponses_(responses);
+
+  const indexes = companyOSResponseBuildPeopleIndexes_(people);
+
+  const matched = [];
+  const unmatched = [];
+  const ambiguous = [];
+
+  latestResult.responses.forEach(function(response) {
+    const matchResult = companyOSResponseFindPerson_(
+      response,
+      indexes
+    );
+
+    if (matchResult.status === "MATCHED") {
+      const preview = companyOSResponseBuildPersonPreview_(
+        matchResult.person,
+        response,
+        matchResult.matchMethod
+      );
+
+      matched.push(preview);
+      return;
+    }
+
+    if (matchResult.status === "AMBIGUOUS") {
+      ambiguous.push({
+        responseId: response.responseId,
+        timestamp: response.timestamp,
+        legalName: response.legalName,
+        professionalName: response.professionalName,
+        email: response.email,
+        possibleMatches: matchResult.people.map(function(person) {
+          return {
+            memberId: person.memberId,
+            name: companyOSResponsePersonLabel_(person),
+            email: person.email
+          };
+        })
+      });
+      return;
+    }
+
+    unmatched.push({
+      responseId: response.responseId,
+      timestamp: response.timestamp,
+      legalName: response.legalName,
+      professionalName: response.professionalName,
+      email: response.email
+    });
+  });
+
+  matched.sort(function(a, b) {
+    return a.personName.localeCompare(b.personName);
+  });
+
+  unmatched.sort(function(a, b) {
+    return companyOSResponseResponseLabel_(a)
+      .localeCompare(companyOSResponseResponseLabel_(b));
+  });
+
+  ambiguous.sort(function(a, b) {
+    return companyOSResponseResponseLabel_(a)
+      .localeCompare(companyOSResponseResponseLabel_(b));
+  });
+
+  const totalChanges = matched.reduce(function(total, person) {
+    return total + person.changes.length;
+  }, 0);
+
+  return {
+    generatedAt: new Date().toISOString(),
+
+    summary: {
+      totalFormRows: responses.length,
+      latestResponses: latestResult.responses.length,
+      duplicateSubmissions: latestResult.duplicateCount,
+      matchedPeople: matched.length,
+      peopleWithChanges: matched.filter(function(person) {
+        return person.changes.length > 0;
+      }).length,
+      unchangedPeople: matched.filter(function(person) {
+        return person.changes.length === 0;
+      }).length,
+      totalChanges: totalChanges,
+      unmatchedResponses: unmatched.length,
+      ambiguousResponses: ambiguous.length
+    },
+
+    people: matched,
+    unmatched: unmatched,
+    ambiguous: ambiguous,
+    duplicates: latestResult.duplicates
+  };
+}
+
+
+/**
+ * Applies only user-selected preview changes.
+ *
+ * Expected:
+ * {
+ *   changes: [
+ *     {
+ *       memberId: "...",
+ *       responseId: "...",
+ *       field: "Phone",
+ *       expectedOldValue: "...",
+ *       newValue: "...",
+ *       valueType: "STRING"
+ *     }
+ *   ]
+ * }
+ */
+function companyOSApplyResponseChanges(payload) {
+  if (!payload || !Array.isArray(payload.changes)) {
+    throw new Error("No response changes were supplied.");
+  }
+
+  if (!payload.changes.length) {
+    return {
+      appliedCount: 0,
+      skippedCount: 0,
+      conflictCount: 0,
+      conflicts: [],
+      message: "No changes were selected."
+    };
+  }
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const sources = companyOSResponseGetSources_();
+
+    const companySS = sources.companySS;
+    const peopleSheet = sources.peopleSheet;
+
+    const peopleTable = companyOSResponseReadTable_(peopleSheet);
+
+    companyOSResponseValidatePeopleHeaders_(
+      peopleTable.headerMap
+    );
+
+    const memberIdHeader =
+      COMPANYOS_RESPONSE.PEOPLE_HEADERS.MEMBER_ID;
+
+    const memberIdColumn =
+      peopleTable.headerMap[memberIdHeader];
+
+    const rowByMemberId = {};
+
+    peopleTable.rows.forEach(function(row) {
+      const memberId = companyOSResponseClean_(
+        row.values[memberIdColumn]
+      );
+
+      if (memberId) {
+        rowByMemberId[memberId] = row;
+      }
+    });
+
+    const logRows = [];
+    const conflicts = [];
+
+    let appliedCount = 0;
+    let skippedCount = 0;
+
+    payload.changes.forEach(function(change) {
+      const memberId = companyOSResponseClean_(
+        change.memberId
+      );
+
+      const field = companyOSResponseClean_(change.field);
+      const personRow = rowByMemberId[memberId];
+
+      if (!memberId || !field || !personRow) {
+        skippedCount++;
+        return;
+      }
+
+      const columnIndex = peopleTable.headerMap[field];
+
+      if (columnIndex === undefined) {
+        skippedCount++;
+        return;
+      }
+
+      const cell = peopleSheet.getRange(
+        personRow.sheetRow,
+        columnIndex + 1
+      );
+
+      const currentValue = cell.getValue();
+      const currentComparable =
+        companyOSResponseComparableValue_(
+          currentValue,
+          change.valueType
+        );
+
+      const expectedComparable =
+        companyOSResponseComparableValue_(
+          change.expectedOldValue,
+          change.valueType
+        );
+
+      if (currentComparable !== expectedComparable) {
+        conflicts.push({
+          memberId: memberId,
+          personName: change.personName || memberId,
+          field: field,
+          expectedOldValue: change.expectedOldValue,
+          currentValue:
+            companyOSResponseDisplayValue_(currentValue),
+          proposedValue: change.newValue
+        });
+        return;
+      }
+
+      const convertedValue =
+        companyOSResponseConvertIncomingValue_(
+          change.newValue,
+          change.valueType
+        );
+
+      const beforeDisplay =
+        companyOSResponseDisplayValue_(currentValue);
+
+      const afterDisplay =
+        companyOSResponseDisplayValue_(convertedValue);
+
+      if (
+        companyOSResponseComparableValue_(
+          convertedValue,
+          change.valueType
+        ) === currentComparable
+      ) {
+        skippedCount++;
+        return;
+      }
+
+      cell.setValue(convertedValue);
+
+      appliedCount++;
+
+      logRows.push([
+        new Date(),
+        "RESPONSE_SYNC",
+        memberId,
+        change.personName || "",
+        field,
+        beforeDisplay,
+        afterDisplay,
+        change.responseId || "",
+        Session.getActiveUser().getEmail() || ""
+      ]);
+    });
+
+    if (logRows.length) {
+      companyOSResponseAppendLogRows_(companySS, logRows);
+    }
+
+    SpreadsheetApp.flush();
+
+    return {
+      appliedCount: appliedCount,
+      skippedCount: skippedCount,
+      conflictCount: conflicts.length,
+      conflicts: conflicts,
+      message:
+        appliedCount +
+        " change" +
+        (appliedCount === 1 ? "" : "s") +
+        " applied."
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/*************************************************
+ * PREVIEW BUILDING
+ *************************************************/
+
+function companyOSResponseBuildPersonPreview_(
+  person,
+  response,
+  matchMethod
+) {
+  const proposedFields =
+    companyOSResponseMapResponseToPeople_(response);
+
+  const changes = [];
+
+  Object.keys(proposedFields).forEach(function(field) {
+    const proposed = proposedFields[field];
+
+    if (!proposed.shouldUpdate) {
+      return;
+    }
+
+    const currentValue = person.values[field];
+
+    const currentComparable =
+      companyOSResponseComparableValue_(
+        currentValue,
+        proposed.valueType
+      );
+
+    const newComparable =
+      companyOSResponseComparableValue_(
+        proposed.value,
+        proposed.valueType
+      );
+
+    if (currentComparable === newComparable) {
+      return;
+    }
+
+    changes.push({
+      changeId:
+        person.memberId +
+        "::" +
+        response.responseId +
+        "::" +
+        field,
+
+      memberId: person.memberId,
+      personName: companyOSResponsePersonLabel_(person),
+      responseId: response.responseId,
+      field: field,
+
+      expectedOldValue:
+        companyOSResponseSerializableValue_(
+          currentValue,
+          proposed.valueType
+        ),
+
+      oldDisplay:
+        companyOSResponseDisplayValue_(currentValue),
+
+      newValue:
+        companyOSResponseSerializableValue_(
+          proposed.value,
+          proposed.valueType
+        ),
+
+      newDisplay:
+        companyOSResponseDisplayValue_(proposed.value),
+
+      valueType: proposed.valueType,
+      selectedByDefault: true
+    });
+  });
+
+  return {
+    memberId: person.memberId,
+    personName: companyOSResponsePersonLabel_(person),
+    email: person.email,
+    responseId: response.responseId,
+    responseTimestamp: response.timestamp,
+    matchMethod: matchMethod,
+    changes: changes
+  };
+}
+
+
+function companyOSResponseMapResponseToPeople_(response) {
+  const H = COMPANYOS_RESPONSE.PEOPLE_HEADERS;
+
+  const result = {};
+
+  function addString(field, value) {
+    const cleaned = companyOSResponseClean_(value);
+
+    result[field] = {
+      value: cleaned,
+      valueType: "STRING",
+      shouldUpdate: cleaned !== ""
+    };
+  }
+
+  function addBoolean(field, value, shouldUpdate) {
+    result[field] = {
+      value: Boolean(value),
+      valueType: "BOOLEAN",
+      shouldUpdate: shouldUpdate !== false
+    };
+  }
+
+  function addDate(field, value) {
+    const parsedDate = companyOSResponseParseDate_(value);
+
+    result[field] = {
+      value: parsedDate,
+      valueType: "DATE",
+      shouldUpdate: parsedDate !== null
+    };
+  }
+
+  addString(H.LEGAL_NAME, response.legalName);
+  addString(
+    H.PROFESSIONAL_NAME,
+    response.professionalName
+  );
+  addString(H.PRONOUNS, response.pronouns);
+  addString(H.EMAIL, response.email);
+  addString(H.PHONE, response.phone);
+  addString(H.ADDRESS, response.address);
+  addDate(H.BIRTHDAY, response.birthday);
+
+  addBoolean(
+    H.CELEBRATE_BIRTHDAY,
+    response.celebrateBirthday.value,
+    response.celebrateBirthday.wasAnswered
+  );
+
+  addString(
+    H.FAVORITE_BIRTHDAY_TREAT,
+    response.favoriteBirthdayTreat
+  );
+
+  addString(
+    H.EMERGENCY_CONTACT_NAME,
+    response.emergencyContactName
+  );
+
+  addString(
+    H.EMERGENCY_CONTACT_RELATIONSHIP,
+    response.emergencyContactRelationship
+  );
+
+  addString(
+    H.EMERGENCY_CONTACT_PHONE,
+    response.emergencyContactPhone
+  );
+
+  addString(H.ALLERGIES, response.allergies);
+
+  if (response.publicPronouns.wasAnswered) {
+    addBoolean(
+      H.MAY_USE_PRONOUNS_PUBLICLY,
+      response.publicPronouns.mayUse,
+      true
+    );
+
+    result[H.PUBLIC_PRONOUNS] = {
+      value: response.publicPronouns.alternate,
+      valueType: "STRING",
+      shouldUpdate: true
+    };
+  }
+
+  if (response.sharing.wasAnswered) {
+    addBoolean(
+      H.SHARE_EMAIL,
+      response.sharing.shareEmail,
+      true
+    );
+
+    addBoolean(
+      H.SHARE_PHONE,
+      response.sharing.sharePhone,
+      true
+    );
+
+    addBoolean(
+      H.SHARE_ADDRESS,
+      response.sharing.shareAddress,
+      true
+    );
+
+    addBoolean(
+      H.SHARE_BIRTHDAY,
+      response.sharing.shareBirthday,
+      true
+    );
+
+    addBoolean(
+      H.SHARE_PROFESSIONAL_NAME,
+      response.sharing.shareProfessionalName,
+      true
+    );
+
+    addBoolean(
+      H.SHARE_PRONOUNS,
+      response.sharing.sharePronouns,
+      true
+    );
+  }
+
+  return result;
+}
+
+
+/*************************************************
+ * PEOPLE + RESPONSE READERS
+ *************************************************/
+
+function companyOSResponseBuildPeople_(rows, headerMap) {
+  const H = COMPANYOS_RESPONSE.PEOPLE_HEADERS;
+
+  return rows
+    .map(function(row) {
+      const valuesByHeader = {};
+
+      Object.keys(headerMap).forEach(function(header) {
+        valuesByHeader[header] =
+          row.values[headerMap[header]];
+      });
+
+      return {
+        sheetRow: row.sheetRow,
+        memberId: companyOSResponseClean_(
+          valuesByHeader[H.MEMBER_ID]
+        ),
+        legalName: companyOSResponseClean_(
+          valuesByHeader[H.LEGAL_NAME]
+        ),
+        professionalName: companyOSResponseClean_(
+          valuesByHeader[H.PROFESSIONAL_NAME]
+        ),
+        displayName: companyOSResponseClean_(
+          valuesByHeader[H.DISPLAY_NAME]
+        ),
+        email: companyOSResponseClean_(
+          valuesByHeader[H.EMAIL]
+        ),
+        values: valuesByHeader
+      };
+    })
+    .filter(function(person) {
+      return Boolean(person.memberId);
+    });
+}
+
+
+function companyOSResponseBuildResponses_(rows, headerMap) {
+  const F = COMPANYOS_RESPONSE.FORM_HEADERS;
+
+  return rows
+    .map(function(row) {
+      function get(header) {
+        const index = headerMap[header];
+        return index === undefined
+          ? ""
+          : row.values[index];
+      }
+
+      const timestampValue = get(F.TIMESTAMP);
+
+      return {
+        responseId: "FORM_ROW_" + row.sheetRow,
+        sheetRow: row.sheetRow,
+
+        timestamp:
+          companyOSResponseTimestampText_(timestampValue),
+
+        timestampMs:
+          companyOSResponseTimestampMs_(timestampValue),
+
+        legalName: companyOSResponseClean_(
+          get(F.LEGAL_NAME)
+        ),
+
+        professionalName: companyOSResponseClean_(
+          get(F.PROFESSIONAL_NAME)
+        ),
+
+        pronouns: companyOSResponseClean_(
+          get(F.PRONOUNS)
+        ),
+
+        publicPronouns:
+          companyOSResponseParsePublicPronouns_(
+            get(F.PUBLIC_PRONOUN_PERMISSION)
+          ),
+
+        email: companyOSResponseClean_(get(F.EMAIL)),
+        phone: companyOSResponseClean_(get(F.PHONE)),
+
+        sharing: companyOSResponseParseSharing_(
+          get(F.SHARING)
+        ),
+
+        address: companyOSResponseClean_(
+          get(F.ADDRESS)
+        ),
+
+        birthday: get(F.BIRTHDAY),
+
+        celebrateBirthday:
+          companyOSResponseParseYesNo_(
+            get(F.CELEBRATE_BIRTHDAY)
+          ),
+
+        favoriteBirthdayTreat:
+          companyOSResponseClean_(
+            get(F.FAVORITE_BIRTHDAY_TREAT)
+          ),
+
+        emergencyContactName:
+          companyOSResponseClean_(
+            get(F.EMERGENCY_CONTACT_NAME)
+          ),
+
+        emergencyContactRelationship:
+          companyOSResponseClean_(
+            get(F.EMERGENCY_CONTACT_RELATIONSHIP)
+          ),
+
+        emergencyContactPhone:
+          companyOSResponseClean_(
+            get(F.EMERGENCY_CONTACT_PHONE)
+          ),
+
+        allergies: companyOSResponseClean_(
+          get(F.ALLERGIES)
+        )
+      };
+    })
+    .filter(function(response) {
+      return Boolean(
+        response.legalName ||
+          response.professionalName ||
+          response.email
+      );
+    });
+}
+
+
+/*************************************************
+ * MATCHING
+ *************************************************/
+
+function companyOSResponseBuildPeopleIndexes_(people) {
+  const byEmail = {};
+  const byLegalName = {};
+  const byProfessionalName = {};
+  const byDisplayName = {};
+
+  people.forEach(function(person) {
+    companyOSResponseIndexPush_(
+      byEmail,
+      companyOSResponseNormalizeEmail_(person.email),
+      person
+    );
+
+    companyOSResponseIndexPush_(
+      byLegalName,
+      companyOSResponseNormalizeName_(person.legalName),
+      person
+    );
+
+    companyOSResponseIndexPush_(
+      byProfessionalName,
+      companyOSResponseNormalizeName_(
+        person.professionalName
+      ),
+      person
+    );
+
+    companyOSResponseIndexPush_(
+      byDisplayName,
+      companyOSResponseNormalizeName_(
+        person.displayName
+      ),
+      person
+    );
+  });
+
+  return {
+    byEmail: byEmail,
+    byLegalName: byLegalName,
+    byProfessionalName: byProfessionalName,
+    byDisplayName: byDisplayName
+  };
+}
+
+
+function companyOSResponseFindPerson_(response, indexes) {
+  const emailKey =
+    companyOSResponseNormalizeEmail_(response.email);
+
+  if (emailKey) {
+    const emailMatches = indexes.byEmail[emailKey] || [];
+
+    if (emailMatches.length === 1) {
+      return {
+        status: "MATCHED",
+        person: emailMatches[0],
+        matchMethod: "Email"
+      };
+    }
+
+    if (emailMatches.length > 1) {
+      return {
+        status: "AMBIGUOUS",
+        people: emailMatches
+      };
+    }
+  }
+
+  const legalKey =
+    companyOSResponseNormalizeName_(response.legalName);
+
+  if (legalKey) {
+    const legalMatches =
+      indexes.byLegalName[legalKey] || [];
+
+    if (legalMatches.length === 1) {
+      return {
+        status: "MATCHED",
+        person: legalMatches[0],
+        matchMethod: "Legal Name"
+      };
+    }
+
+    if (legalMatches.length > 1) {
+      return {
+        status: "AMBIGUOUS",
+        people: legalMatches
+      };
+    }
+  }
+
+  const professionalKey =
+    companyOSResponseNormalizeName_(
+      response.professionalName
+    );
+
+  if (professionalKey) {
+    const professionalMatches =
+      indexes.byProfessionalName[professionalKey] || [];
+
+    if (professionalMatches.length === 1) {
+      return {
+        status: "MATCHED",
+        person: professionalMatches[0],
+        matchMethod: "Professional / Union Name"
+      };
+    }
+
+    if (professionalMatches.length > 1) {
+      return {
+        status: "AMBIGUOUS",
+        people: professionalMatches
+      };
+    }
+  }
+
+  const combinedNameMatches = [];
+  const seen = {};
+
+  [legalKey, professionalKey]
+    .filter(Boolean)
+    .forEach(function(nameKey) {
+      [
+        indexes.byLegalName[nameKey] || [],
+        indexes.byProfessionalName[nameKey] || [],
+        indexes.byDisplayName[nameKey] || []
+      ].forEach(function(group) {
+        group.forEach(function(person) {
+          if (!seen[person.memberId]) {
+            seen[person.memberId] = true;
+            combinedNameMatches.push(person);
+          }
+        });
+      });
+    });
+
+  if (combinedNameMatches.length === 1) {
+    return {
+      status: "MATCHED",
+      person: combinedNameMatches[0],
+      matchMethod: "Name"
+    };
+  }
+
+  if (combinedNameMatches.length > 1) {
+    return {
+      status: "AMBIGUOUS",
+      people: combinedNameMatches
+    };
+  }
+
+  return {
+    status: "UNMATCHED"
+  };
+}
+
+
+/*************************************************
+ * DUPLICATE RESPONSES
+ *************************************************/
+
+function companyOSResponseKeepLatestResponses_(responses) {
+  const grouped = {};
+
+  responses.forEach(function(response) {
+    const key =
+      companyOSResponseResponseIdentityKey_(response);
+
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+
+    grouped[key].push(response);
+  });
+
+  const latestResponses = [];
+  const duplicates = [];
+  let duplicateCount = 0;
+
+  Object.keys(grouped).forEach(function(key) {
+    const group = grouped[key];
+
+    group.sort(function(a, b) {
+      if (a.timestampMs !== b.timestampMs) {
+        return b.timestampMs - a.timestampMs;
+      }
+
+      return b.sheetRow - a.sheetRow;
+    });
+
+    latestResponses.push(group[0]);
+
+    if (group.length > 1) {
+      duplicateCount += group.length - 1;
+
+      duplicates.push({
+        person:
+          companyOSResponseResponseLabel_(group[0]),
+        newestResponseId: group[0].responseId,
+        newestTimestamp: group[0].timestamp,
+        ignoredSubmissions: group.slice(1).map(function(item) {
+          return {
+            responseId: item.responseId,
+            timestamp: item.timestamp
+          };
+        })
+      });
+    }
+  });
+
+  return {
+    responses: latestResponses,
+    duplicates: duplicates,
+    duplicateCount: duplicateCount
+  };
+}
+
+
+/*************************************************
+ * FORM PARSING
+ *************************************************/
+
+function companyOSResponseParseSharing_(value) {
+  const raw = companyOSResponseClean_(value);
+
+  if (!raw) {
+    return {
+      wasAnswered: false,
+      shareEmail: false,
+      sharePhone: false,
+      shareAddress: false,
+      shareBirthday: false,
+      shareProfessionalName: false,
+      sharePronouns: false
+    };
+  }
+
+  const normalized =
+    companyOSResponseNormalizePhrase_(raw);
+
+  return {
+    wasAnswered: true,
+
+    shareEmail:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "email"
+      ),
+
+    sharePhone:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "phone"
+      ),
+
+    shareAddress:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "address"
+      ),
+
+    shareBirthday:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "birthday"
+      ),
+
+    shareProfessionalName:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "professional name"
+      ) ||
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "professional union name"
+      ),
+
+    sharePronouns:
+      companyOSResponseContainsPhrase_(
+        normalized,
+        "pronouns"
+      )
+  };
+}
+
+
+function companyOSResponseParsePublicPronouns_(value) {
+  const raw = companyOSResponseClean_(value);
+
+  if (!raw) {
+    return {
+      wasAnswered: false,
+      mayUse: false,
+      alternate: ""
+    };
+  }
+
+  const normalized =
+    companyOSResponseNormalizePhrase_(raw);
+
+  const beginsYes =
+    /^(yes|y|sure|okay|ok|you may|may use)\b/.test(
+      normalized
+    );
+
+  if (beginsYes) {
+    return {
+      wasAnswered: true,
+      mayUse: true,
+      alternate: ""
+    };
+  }
+
+  const beginsNo =
+    /^(no|n|do not|dont|please do not)\b/.test(
+      normalized
+    );
+
+  let alternate = "";
+
+  if (beginsNo) {
+    alternate = raw
+      .replace(
+        /^(no|n|do not|don't|dont|please do not)\b[\s:;,\-–—]*/i,
+        ""
+      )
+      .replace(
+        /^(please\s+)?use\b[\s:;,\-–—]*/i,
+        ""
+      )
+      .trim();
+  } else {
+    alternate = raw;
+  }
+
+  return {
+    wasAnswered: true,
+    mayUse: false,
+    alternate: alternate
+  };
+}
+
+
+function companyOSResponseParseYesNo_(value) {
+  const raw = companyOSResponseClean_(value);
+
+  if (!raw) {
+    return {
+      wasAnswered: false,
+      value: false
+    };
+  }
+
+  const normalized =
+    companyOSResponseNormalizePhrase_(raw);
+
+  const isNo =
+    /^(no|n|false|do not|dont|prefer not)\b/.test(
+      normalized
+    );
+
+  return {
+    wasAnswered: true,
+    value: !isNo
+  };
+}
+
+
+/*************************************************
+ * TABLE + HEADER HELPERS
+ *************************************************/
+
+function companyOSResponseReadTable_(sheet) {
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+
+  if (!values.length) {
+    return {
+      headers: [],
+      headerMap: {},
+      rows: []
+    };
+  }
+
+  const headers = values[0].map(function(header) {
+    return companyOSResponseNormalizeHeader_(header);
+  });
+
+  const headerMap = {};
+
+  headers.forEach(function(header, index) {
+    if (header && headerMap[header] === undefined) {
+      headerMap[header] = index;
+    }
+  });
+
+  const rows = values.slice(1).map(function(row, index) {
+    return {
+      sheetRow: index + 2,
+      values: row
+    };
+  });
+
+  return {
+    headers: headers,
+    headerMap: headerMap,
+    rows: rows
+  };
+}
+
+
+function companyOSResponseValidatePeopleHeaders_(headerMap) {
+  const required = [
+    COMPANYOS_RESPONSE.PEOPLE_HEADERS.MEMBER_ID,
+    COMPANYOS_RESPONSE.PEOPLE_HEADERS.LEGAL_NAME,
+    COMPANYOS_RESPONSE.PEOPLE_HEADERS.PROFESSIONAL_NAME,
+    COMPANYOS_RESPONSE.PEOPLE_HEADERS.DISPLAY_NAME,
+    COMPANYOS_RESPONSE.PEOPLE_HEADERS.EMAIL
+  ];
+
+  companyOSResponseAssertHeaders_(
+    headerMap,
+    required,
+    COMPANYOS_RESPONSE.PEOPLE_SHEET_NAME
+  );
+}
+
+
+function companyOSResponseValidateFormHeaders_(headerMap) {
+  const required = [
+    COMPANYOS_RESPONSE.FORM_HEADERS.TIMESTAMP,
+    COMPANYOS_RESPONSE.FORM_HEADERS.LEGAL_NAME,
+    COMPANYOS_RESPONSE.FORM_HEADERS.EMAIL
+  ];
+
+  companyOSResponseAssertHeaders_(
+    headerMap,
+    required,
+    COMPANYOS_RESPONSE.RESPONSE_SHEET_NAME
+  );
+}
+
+
+function companyOSResponseAssertHeaders_(
+  headerMap,
+  requiredHeaders,
+  sheetName
+) {
+  const missing = requiredHeaders.filter(function(header) {
+    return headerMap[header] === undefined;
+  });
+
+  if (missing.length) {
+    throw new Error(
+      sheetName +
+        " is missing required columns:\n\n" +
+        missing.join("\n")
+    );
+  }
+}
+
+
+function companyOSResponseNormalizeHeader_(value) {
+  return companyOSResponseClean_(value)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+/*************************************************
+ * LOG
+ *************************************************/
+
+function companyOSResponseAppendLogRows_(ss, rows) {
+  let sheet = ss.getSheetByName(
+    COMPANYOS_RESPONSE.LOG_SHEET_NAME
+  );
+
+  if (!sheet) {
+    sheet = ss.insertSheet(
+      COMPANYOS_RESPONSE.LOG_SHEET_NAME
+    );
+  }
+
+  const headers = [
+    "Timestamp",
+    "Action",
+    "Member ID",
+    "Person",
+    "Field",
+    "Old Value",
+    "New Value",
+    "Source Response",
+    "Applied By"
+  ];
+
+  if (sheet.getLastRow() === 0) {
+    sheet
+      .getRange(1, 1, 1, headers.length)
+      .setValues([headers])
+      .setFontWeight("bold");
+
+    sheet.setFrozenRows(1);
+  }
+
+  sheet
+    .getRange(
+      sheet.getLastRow() + 1,
+      1,
+      rows.length,
+      headers.length
+    )
+    .setValues(rows);
+}
+
+
+/*************************************************
+ * VALUE CONVERSION
+ *************************************************/
+
+function companyOSResponseConvertIncomingValue_(
+  value,
+  valueType
+) {
+  if (valueType === "BOOLEAN") {
+    return companyOSResponseToBoolean_(value);
+  }
+
+  if (valueType === "DATE") {
+    return companyOSResponseParseDate_(value);
+  }
+
+  return companyOSResponseClean_(value);
+}
+
+
+function companyOSResponseComparableValue_(
+  value,
+  valueType
+) {
+  if (valueType === "BOOLEAN") {
+    return companyOSResponseToBoolean_(value)
+      ? "TRUE"
+      : "FALSE";
+  }
+
+  if (valueType === "DATE") {
+    const date = companyOSResponseParseDate_(value);
+
+    if (!date) {
+      return "";
+    }
+
+    return Utilities.formatDate(
+      date,
+      Session.getScriptTimeZone(),
+      "MM-dd"
+    );
+  }
+
+  return companyOSResponseNormalizeText_(value);
+}
+
+
+function companyOSResponseSerializableValue_(
+  value,
+  valueType
+) {
+  if (valueType === "BOOLEAN") {
+    return companyOSResponseToBoolean_(value);
+  }
+
+  if (valueType === "DATE") {
+    const date = companyOSResponseParseDate_(value);
+
+    return date
+      ? Utilities.formatDate(
+          date,
+          Session.getScriptTimeZone(),
+          "yyyy-MM-dd"
+        )
+      : "";
+  }
+
+  return companyOSResponseClean_(value);
+}
+
+
+function companyOSResponseDisplayValue_(value) {
+  if (value === true) {
+    return "Yes";
+  }
+
+  if (value === false) {
+    return "No";
+  }
+
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      "M/d"
+    );
+  }
+
+  return companyOSResponseClean_(value);
+}
+
+
+function companyOSResponseParseDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(
+      2000,
+      value.getMonth(),
+      value.getDate()
+    );
+  }
+
+  const text = companyOSResponseClean_(value);
+
+  if (!text) {
+    return null;
+  }
+
+  const ymd = text.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+  );
+
+  if (ymd) {
+    return new Date(
+      2000,
+      Number(ymd[2]) - 1,
+      Number(ymd[3])
+    );
+  }
+
+  const mdy = text.match(
+    /^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?$/
+  );
+
+  if (mdy) {
+    return new Date(
+      2000,
+      Number(mdy[1]) - 1,
+      Number(mdy[2])
+    );
+  }
+
+  const parsed = new Date(text);
+
+  if (!isNaN(parsed.getTime())) {
+    return new Date(
+      2000,
+      parsed.getMonth(),
+      parsed.getDate()
+    );
+  }
+
+  return null;
+}
+
+
+/*************************************************
+ * GENERAL HELPERS
+ *************************************************/
+
+function companyOSResponsePersonLabel_(person) {
+  return (
+    person.displayName ||
+    person.professionalName ||
+    person.legalName ||
+    person.memberId
+  );
+}
+
+
+function companyOSResponseResponseLabel_(response) {
+  return (
+    response.professionalName ||
+    response.legalName ||
+    response.email ||
+    "Unknown Response"
+  );
+}
+
+
+function companyOSResponseResponseIdentityKey_(response) {
+  const email =
+    companyOSResponseNormalizeEmail_(response.email);
+
+  if (email) {
+    return "EMAIL::" + email;
+  }
+
+  const legal =
+    companyOSResponseNormalizeName_(response.legalName);
+
+  if (legal) {
+    return "LEGAL::" + legal;
+  }
+
+  const professional =
+    companyOSResponseNormalizeName_(
+      response.professionalName
+    );
+
+  if (professional) {
+    return "PRO::" + professional;
+  }
+
+  return "ROW::" + response.responseId;
+}
+
+
+function companyOSResponseIndexPush_(index, key, value) {
+  if (!key) {
+    return;
+  }
+
+  if (!index[key]) {
+    index[key] = [];
+  }
+
+  index[key].push(value);
+}
+
+
+function companyOSResponseNormalizeEmail_(value) {
+  return companyOSResponseClean_(value)
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+
+function companyOSResponseNormalizeName_(value) {
+  return companyOSResponseClean_(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function companyOSResponseNormalizePhrase_(value) {
+  return companyOSResponseClean_(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function companyOSResponseNormalizeText_(value) {
+  return companyOSResponseClean_(value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+
+function companyOSResponseContainsPhrase_(
+  normalizedText,
+  phrase
+) {
+  const normalizedPhrase =
+    companyOSResponseNormalizePhrase_(phrase);
+
+  return (
+    (" " + normalizedText + " ").indexOf(
+      " " + normalizedPhrase + " "
+    ) !== -1
+  );
+}
+
+
+function companyOSResponseClean_(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+
+function companyOSResponseToBoolean_(value) {
+  if (value === true) {
+    return true;
+  }
+
+  if (value === false) {
+    return false;
+  }
+
+  const normalized =
+    companyOSResponseNormalizePhrase_(value);
+
+  return [
+    "true",
+    "yes",
+    "y",
+    "1",
+    "checked"
+  ].indexOf(normalized) !== -1;
+}
+
+
+function companyOSResponseTimestampMs_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value.getTime();
+  }
+
+  const parsed = new Date(value);
+
+  return isNaN(parsed.getTime())
+    ? 0
+    : parsed.getTime();
+}
+
+
+function companyOSResponseTimestampText_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      "M/d/yyyy h:mm a"
+    );
+  }
+
+  return companyOSResponseClean_(value);
+}
