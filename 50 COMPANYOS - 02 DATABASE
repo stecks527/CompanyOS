@@ -1,6 +1,6 @@
 /*************************************************
  * 50 COMPANYOS - 02 DATABASE
- * Version: 1.0.0
+ * Version: 1.2.0
  *************************************************/
 
 function setupCompanyOS() {
@@ -51,7 +51,7 @@ function companyOSEnsureDatabase_() {
 function companyOSApplyPeopleValidation_(engine) {
   const sh = engine.getSheetByName(COMPANYOS_CONFIG.SHEETS.PEOPLE);
   const map = companyOSHeaderMap_(COMPANYOS_PEOPLE_HEADERS);
-  const rows = Math.max(sh.getMaxRows() - 1, 1);
+  const rows = Math.max(sh.getLastRow() - 1, 1);
 
   sh.getRange(2, map["Status"] + 1, rows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
@@ -66,12 +66,18 @@ function companyOSApplyPeopleValidation_(engine) {
   );
 
   [
-    "Same As Legal Name", "May Use Pronouns Publicly", "Celebrate Birthday",
-    "Share Email", "Share Phone", "Share Address", "Share Birthday",
-    "Share Professional Name", "Share Pronouns"
-  ].forEach(function(header) {
-    sh.getRange(2, map[header] + 1, rows, 1).insertCheckboxes();
-  });
+  "Same As Legal Name",
+  "May Use Pronouns Publicly",
+  "Celebrate Birthday",
+  "Share Email",
+  "Share Phone",
+  "Share Address",
+  "Share Birthday",
+  "Share Professional Name",
+  "Share Pronouns"
+].forEach(function(header) {
+  sh.getRange(2, map[header] + 1, rows, 1).insertCheckboxes();
+});
 }
 
 function companyOSListMembers_() {
@@ -99,8 +105,8 @@ function companyOSSaveMember_(payload) {
   if (!companyOSClean_(payload.department)) errors.push("Department is required.");
   if (!companyOSClean_(payload.roleTitle)) errors.push("Role / Title is required.");
   if (!companyOSClean_(payload.status)) errors.push("Status is required.");
-  if (!companyOSBool_(payload.sameAsLegalName) && !companyOSClean_(payload.professionalName)) {
-    errors.push("Professional / Union Name is required when different from Legal Name.");
+  if (!companyOSClean_(payload.professionalName)) {
+    errors.push("Professional / Union Name is required.");
   }
   if (errors.length) throw new Error(errors.join("\n"));
 
@@ -113,19 +119,20 @@ function companyOSSaveMember_(payload) {
     const values = sh.getDataRange().getValues();
     const headers = values[0];
     const map = companyOSHeaderMap_(headers);
-    const memberId = companyOSClean_(payload.memberId) || Utilities.getUuid();
+    const memberId = companyOSClean_(payload.memberId) || companyOSNextMemberId_(values, map);
     const found = values.slice(1).findIndex(row => companyOSClean_(row[map["Member ID"]]) === memberId);
     const old = found >= 0 ? companyOSRowToMember_(headers, values[found + 1], found + 2) : null;
     const now = new Date();
     const legal = companyOSClean_(payload.legalName);
-    const same = companyOSBool_(payload.sameAsLegalName);
-    const professional = same ? legal : companyOSClean_(payload.professionalName);
+    const professional = companyOSClean_(payload.professionalName) || legal;
+    const same = companyOSKey_(professional) === companyOSKey_(legal);
 
     const member = {
       memberId, status: companyOSClean_(payload.status),
       department: companyOSClean_(payload.department), roleTitle: companyOSClean_(payload.roleTitle),
       legalName: legal, professionalName: professional, sameAsLegalName: same,
-      displayName: companyOSClean_(payload.displayName) || professional || legal,
+      // Professional / Union Name is the canonical StageOS display name.
+      displayName: professional || legal,
       pronouns: companyOSClean_(payload.pronouns),
       mayUsePronounsPublicly: companyOSBool_(payload.mayUsePronounsPublicly),
       publicPronouns: companyOSClean_(payload.publicPronouns),
@@ -139,6 +146,7 @@ function companyOSSaveMember_(payload) {
       allergiesPrivateNotes: companyOSClean_(payload.allergiesPrivateNotes),
       headshot: companyOSClean_(payload.headshot), startDate: companyOSDate_(payload.startDate),
       endDate: companyOSDate_(payload.endDate), returnDate: companyOSDate_(payload.returnDate),
+      returnEndDate: companyOSDate_(payload.returnEndDate),
       shareEmail: companyOSBool_(payload.shareEmail), sharePhone: companyOSBool_(payload.sharePhone),
       shareAddress: companyOSBool_(payload.shareAddress), shareBirthday: companyOSBool_(payload.shareBirthday),
       shareProfessionalName: companyOSBool_(payload.shareProfessionalName),
@@ -178,6 +186,7 @@ function companyOSRowToMember_(headers, row, sheetRow) {
     allergiesPrivateNotes: companyOSClean_(o["Allergies / Private SM Notes"]),
     headshot: companyOSClean_(o["Headshot URL / File ID"]), startDate: companyOSDateText_(o["Start Date"]),
     endDate: companyOSDateText_(o["End Date"]), returnDate: companyOSDateText_(o["Return Date"]),
+    returnEndDate: companyOSDateText_(o["Return End Date"]),
     shareEmail: companyOSBool_(o["Share Email"]), sharePhone: companyOSBool_(o["Share Phone"]),
     shareAddress: companyOSBool_(o["Share Address"]), shareBirthday: companyOSBool_(o["Share Birthday"]),
     shareProfessionalName: companyOSBool_(o["Share Professional Name"]), sharePronouns: companyOSBool_(o["Share Pronouns"]),
@@ -198,6 +207,7 @@ function companyOSValueForHeader_(m, h) {
     "Emergency Contact Relationship": m.emergencyContactRelationship, "Emergency Contact Phone": m.emergencyContactPhone,
     "Allergies / Private SM Notes": m.allergiesPrivateNotes, "Headshot URL / File ID": m.headshot,
     "Start Date": m.startDate, "End Date": m.endDate, "Return Date": m.returnDate,
+    "Return End Date": m.returnEndDate,
     "Share Email": m.shareEmail, "Share Phone": m.sharePhone, "Share Address": m.shareAddress,
     "Share Birthday": m.shareBirthday, "Share Professional Name": m.shareProfessionalName,
     "Share Pronouns": m.sharePronouns, "Gmail Labels JSON": JSON.stringify(m.gmailLabels || []),
@@ -222,3 +232,132 @@ function companyOSDate_(v) { if (!v) return ""; if (v instanceof Date && !isNaN(
 function companyOSDateText_(v) { if (!v) return ""; const d = v instanceof Date ? v : new Date(v); return isNaN(d) ? "" : Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); }
 function companyOSDateTimeText_(v) { if (!v) return ""; const d = v instanceof Date ? v : new Date(v); return isNaN(d) ? companyOSClean_(v) : d.toISOString(); }
 function companyOSJsonArray_(v) { if (Array.isArray(v)) return v; try { const x = JSON.parse(companyOSClean_(v) || "[]"); return Array.isArray(x) ? x : []; } catch (e) { return []; } }
+/*************************************************
+ * ENGINE / DATABASE HELPERS
+ *************************************************/
+
+function companyOSGetEngineWorkbook_() {
+  return SpreadsheetApp.openById(COMPANYOS_CONFIG.ENGINE_WORKBOOK_ID);
+}
+
+function companyOSGetPeopleSheet_() {
+  companyOSEnsureDatabase_();
+  return companyOSGetEngineWorkbook_()
+    .getSheetByName(COMPANYOS_CONFIG.SHEETS.PEOPLE);
+}
+
+function companyOSNextMemberId_(values, map) {
+  let max = 0;
+
+  (values || []).slice(1).forEach(function(row) {
+    const value = companyOSClean_(row[map["Member ID"]]);
+    const match = value.match(/^CMP-(\d+)$/i);
+    if (match) max = Math.max(max, Number(match[1]));
+  });
+
+  return "CMP-" + String(max + 1).padStart(4, "0");
+}
+
+function companyOSArchiveMember_(memberId) {
+  const member = companyOSGetMember_(memberId);
+  if (!member) throw new Error("Company member not found.");
+
+  member.status = "Inactive";
+  return companyOSSaveMember_(member);
+}
+
+function companyOSReactivateMember_(memberId) {
+  const member = companyOSGetMember_(memberId);
+  if (!member) throw new Error("Company member not found.");
+
+  member.status = "Active";
+  member.archivedAt = "";
+  return companyOSSaveMember_(member);
+}
+
+function companyOSBuildHeaderMap_(headers) {
+  return companyOSHeaderMap_(headers);
+}
+
+function companyOSBoolean_(value) {
+  return companyOSBool_(value);
+}
+
+function diagnoseCompanyOSPeopleLocation() {
+  const configuredId =
+    COMPANYOS_CONFIG.ENGINE_WORKBOOK_ID;
+
+  const engine =
+    SpreadsheetApp.openById(configuredId);
+
+  const peopleSheet =
+    engine.getSheetByName(
+      COMPANYOS_CONFIG.SHEETS.PEOPLE
+    );
+
+  if (!peopleSheet) {
+    throw new Error(
+      'No "' +
+      COMPANYOS_CONFIG.SHEETS.PEOPLE +
+      '" sheet exists in the configured Engine workbook.'
+    );
+  }
+
+  const values =
+    peopleSheet.getDataRange().getValues();
+
+  const headers =
+    values.length ? values[0] : [];
+
+  const memberIdColumn =
+    headers.indexOf("Member ID");
+
+  let populatedMemberIds = 0;
+
+  if (memberIdColumn >= 0) {
+    populatedMemberIds =
+      values
+        .slice(1)
+        .filter(function(row) {
+          return String(
+            row[memberIdColumn] || ""
+          ).trim();
+        })
+        .length;
+  }
+
+  const message = [
+    "COMPANYOS LOCATION DIAGNOSTIC",
+    "",
+    "Workbook Name:",
+    engine.getName(),
+    "",
+    "Configured Workbook ID:",
+    configuredId,
+    "",
+    "Workbook URL:",
+    engine.getUrl(),
+    "",
+    "People Sheet:",
+    peopleSheet.getName(),
+    "",
+    "Last Row:",
+    peopleSheet.getLastRow(),
+    "",
+    "Populated Member IDs:",
+    populatedMemberIds
+  ].join("\n");
+
+  Logger.log(message);
+
+  SpreadsheetApp.getUi().alert(message);
+
+  return {
+    workbookName: engine.getName(),
+    workbookId: configuredId,
+    workbookUrl: engine.getUrl(),
+    peopleSheet: peopleSheet.getName(),
+    lastRow: peopleSheet.getLastRow(),
+    populatedMemberIds: populatedMemberIds
+  };
+}
