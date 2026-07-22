@@ -1,0 +1,33 @@
+/*************************************************
+ * 51 COMPANYOS - PRODUCTION BRANDING
+ *
+ * Branded launcher for the Company Roster.
+ *
+ * This deliberately keeps internal file/function
+ * names unchanged while removing OS branding from
+ * the visible interface.
+ *************************************************/
+
+function openCompanyRoster() {
+  const template =
+    HtmlService.createTemplateFromFile(
+      "CompanyOSDialog"
+    );
+
+  const html =
+    template
+      .evaluate()
+      .setWidth(1200)
+      .setHeight(860);
+
+  SpreadsheetApp
+    .getUi()
+    .showModalDialog(
+      html,
+      productionUIDialogTitle_(
+        "Company Roster"
+      )
+    );
+
+  return true;
+}
