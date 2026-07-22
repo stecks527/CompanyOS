@@ -1,0 +1,1443 @@
+/*************************************************
+ * 51 COMPANYOS IMPORTOS - 01 CORE
+ * Version 1.1.0
+ *
+ * High-speed CompanyOS bulk import engine.
+ *
+ * CURRENT SOURCE:
+ * - CompanyOS Migration Preview
+ *
+ * CURRENT DESTINATION:
+ * - CompanyOS People
+ *
+ * SAFETY:
+ * - Does not modify the production Contact Sheet
+ * - Reads each source sheet once
+ * - Preserves CompanyOS-only/private fields on updates
+ * - Appends new records in one batch
+ * - Updates existing records in grouped batches
+ * - Updates the preview in bulk
+ * - Restart-safe: IMPORTED rows are skipped
+ *************************************************/
+
+
+/**
+ * Executes the reviewed CompanyOS migration preview.
+ *
+ * This is the bulk equivalent of companyOSSaveMember_().
+ * It intentionally does not call companyOSSaveMember_()
+ * once per person.
+ */
+function companyOSImportPreview_() {
+  companyOSEnsureDatabase_();
+
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(30000)) {
+    throw new Error(
+      "CompanyOS is already processing an import. " +
+      "Please wait for that import to finish."
+    );
+  }
+
+  try {
+    const engine = companyOSGetEngineWorkbook_();
+
+    const previewSheet = engine.getSheetByName(
+      COMPANYOS_MIGRATION.PREVIEW_SHEET
+    );
+
+    if (!previewSheet) {
+      throw new Error(
+        "CompanyOS Migration Preview was not found. " +
+        "Build the migration preview first."
+      );
+    }
+
+    const peopleSheet = engine.getSheetByName(
+      COMPANYOS_CONFIG.SHEETS.PEOPLE
+    );
+
+    if (!peopleSheet) {
+      throw new Error(
+        'The "' +
+        COMPANYOS_CONFIG.SHEETS.PEOPLE +
+        '" sheet was not found.'
+      );
+    }
+
+    const previewValues = previewSheet
+      .getDataRange()
+      .getValues();
+
+    if (previewValues.length <= 1) {
+      throw new Error(
+        "The migration preview contains no records."
+      );
+    }
+
+    const peopleValues = peopleSheet
+      .getDataRange()
+      .getValues();
+
+    if (!peopleValues.length) {
+      throw new Error(
+        "CompanyOS People does not contain a header row."
+      );
+    }
+
+    const previewHeaders = previewValues[0];
+    const previewMap = companyOSBuildHeaderMap_(
+      previewHeaders
+    );
+
+    const peopleHeaders = peopleValues[0];
+    const peopleMap = companyOSHeaderMap_(
+      peopleHeaders
+    );
+
+    companyOSImportValidatePreviewHeaders_(
+      previewMap
+    );
+
+    companyOSImportValidatePeopleHeaders_(
+      peopleMap
+    );
+
+    const pendingCount =
+      companyOSImportCountPendingRows_(
+        previewValues,
+        previewMap
+      );
+
+    if (!pendingCount) {
+      return {
+        success: true,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        alreadyImported:
+          previewValues.length - 1,
+        failed: 0,
+        failures: [],
+        importedMemberIds: [],
+        backupName: "",
+        message:
+          "There are no pending selected rows to import."
+      };
+    }
+
+    /*
+     * Create one safety backup after validation and before
+     * any CompanyOS People records are changed.
+     */
+    const backupName =
+      companyOSCreatePeopleMigrationBackup_();
+
+    const lookup =
+      companyOSImportBuildPeopleLookup_(
+        peopleValues,
+        peopleMap
+      );
+
+    let nextMemberNumber =
+      companyOSImportFindNextMemberNumber_(
+        peopleValues,
+        peopleMap
+      );
+
+    const results = {
+      success: true,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      alreadyImported: 0,
+      failed: 0,
+      failures: [],
+      importedMemberIds: [],
+      backupName: backupName
+    };
+
+    /*
+     * Existing records are stored by their actual sheet row.
+     * New records are collected separately and appended once.
+     */
+    const updatesBySheetRow = {};
+    const appendRows = [];
+
+    /*
+     * Preview outputs. Each array contains one row for every
+     * preview body row so each preview column can be updated
+     * with a single setValues() call.
+     */
+    const previewMemberIdOutput = [];
+    const previewActionOutput = [];
+    const previewWarningOutput = [];
+    const previewWarningBackgrounds = [];
+
+    for (
+      let previewIndex = 1;
+      previewIndex < previewValues.length;
+      previewIndex++
+    ) {
+      const previewRow = previewValues[previewIndex];
+      const sheetRow = previewIndex + 1;
+
+      const include = companyOSImportBoolean_(
+        previewRow[previewMap["Include"]]
+      );
+
+      let memberId = companyOSImportClean_(
+        previewRow[
+          previewMap["Existing Member ID"]
+        ]
+      );
+
+      const originalAction =
+        companyOSImportClean_(
+          previewRow[previewMap["Action"]]
+        ).toUpperCase();
+
+      const originalWarning =
+        companyOSImportClean_(
+          previewRow[previewMap["Warning"]]
+        );
+
+      const name = companyOSImportClean_(
+        previewRow[previewMap["Name"]]
+      );
+
+      if (!include) {
+        results.skipped++;
+
+        companyOSImportPushPreviewResult_({
+          memberIds: previewMemberIdOutput,
+          actions: previewActionOutput,
+          warnings: previewWarningOutput,
+          backgrounds:
+            previewWarningBackgrounds,
+          memberId: memberId,
+          action: originalAction,
+          warning: originalWarning,
+          background:
+            originalWarning ? "#fce8b2" : null
+        });
+
+        continue;
+      }
+
+      /*
+       * Rows completed by a prior execution are never
+       * imported a second time.
+       */
+      if (originalAction === "IMPORTED") {
+        results.alreadyImported++;
+
+        companyOSImportPushPreviewResult_({
+          memberIds: previewMemberIdOutput,
+          actions: previewActionOutput,
+          warnings: previewWarningOutput,
+          backgrounds:
+            previewWarningBackgrounds,
+          memberId: memberId,
+          action: "IMPORTED",
+          warning: "",
+          background: null
+        });
+
+        continue;
+      }
+
+      try {
+        const email = companyOSImportClean_(
+          previewRow[previewMap["Email"]]
+        );
+
+        const match =
+          companyOSImportResolveExistingMatch_({
+            memberId: memberId,
+            email: email,
+            name: name,
+            lookup: lookup
+          });
+
+        let oldMember = null;
+        let targetSheetRow = null;
+        let isUpdate = false;
+
+        if (match) {
+          isUpdate = true;
+          targetSheetRow = match.sheetRow;
+          memberId = match.memberId;
+
+          oldMember = companyOSRowToMember_(
+            peopleHeaders,
+            match.rowValues,
+            targetSheetRow
+          );
+        }
+
+        if (!memberId) {
+          memberId =
+            companyOSImportFormatMemberId_(
+              nextMemberNumber
+            );
+
+          nextMemberNumber++;
+        }
+
+        const member =
+          companyOSImportBuildMember_({
+            previewRow: previewRow,
+            previewMap: previewMap,
+            memberId: memberId,
+            oldMember: oldMember
+          });
+
+        const outputRow =
+          peopleHeaders.map(function (header) {
+            return companyOSValueForHeader_(
+              member,
+              header
+            );
+          });
+
+        if (isUpdate) {
+          updatesBySheetRow[targetSheetRow] =
+            outputRow;
+
+          results.updated++;
+
+          companyOSImportAddLookupRecord_(
+            lookup,
+            {
+              sheetRow: targetSheetRow,
+              rowValues: outputRow,
+              memberId: member.memberId,
+              email: member.email,
+              names: [
+                member.displayName,
+                member.professionalName,
+                member.legalName
+              ]
+            }
+          );
+
+        } else {
+          appendRows.push(outputRow);
+
+          /*
+           * The future sheet row lets later preview rows
+           * match a person created earlier in this same run.
+           */
+          const futureSheetRow =
+            peopleSheet.getLastRow() +
+            appendRows.length;
+
+          companyOSImportAddLookupRecord_(
+            lookup,
+            {
+              sheetRow: futureSheetRow,
+              rowValues: outputRow,
+              memberId: member.memberId,
+              email: member.email,
+              names: [
+                member.displayName,
+                member.professionalName,
+                member.legalName
+              ],
+              pendingAppendIndex:
+                appendRows.length - 1
+            }
+          );
+
+          results.created++;
+        }
+
+        results.importedMemberIds.push(
+          memberId
+        );
+
+        companyOSImportPushPreviewResult_({
+          memberIds: previewMemberIdOutput,
+          actions: previewActionOutput,
+          warnings: previewWarningOutput,
+          backgrounds:
+            previewWarningBackgrounds,
+          memberId: memberId,
+          action: "IMPORTED",
+          warning: "",
+          background: null
+        });
+
+      } catch (err) {
+        const errorText = String(
+          err && err.message
+            ? err.message
+            : err
+        );
+
+        results.failed++;
+
+        results.failures.push({
+          previewRow: sheetRow,
+          name: name,
+          error: errorText
+        });
+
+        companyOSImportPushPreviewResult_({
+          memberIds: previewMemberIdOutput,
+          actions: previewActionOutput,
+          warnings: previewWarningOutput,
+          backgrounds:
+            previewWarningBackgrounds,
+          memberId: memberId,
+          action: "FAILED",
+          warning: errorText,
+          background: "#f4cccc"
+        });
+      }
+    }
+
+    /*
+     * Write existing-member changes in contiguous blocks.
+     * This preserves untouched rows and avoids rewriting the
+     * entire CompanyOS People database.
+     */
+    companyOSImportWriteUpdatedRows_(
+      peopleSheet,
+      peopleHeaders.length,
+      updatesBySheetRow
+    );
+
+    /*
+     * Append all new records in one operation.
+     */
+    companyOSImportAppendRows_(
+      peopleSheet,
+      peopleHeaders.length,
+      appendRows
+    );
+
+    /*
+     * Update the migration preview in four bulk operations.
+     */
+    companyOSImportWritePreviewResults_({
+      sheet: previewSheet,
+      map: previewMap,
+      memberIds: previewMemberIdOutput,
+      actions: previewActionOutput,
+      warnings: previewWarningOutput,
+      warningBackgrounds:
+        previewWarningBackgrounds
+    });
+
+    SpreadsheetApp.flush();
+
+    const message = [
+      "CompanyOS migration complete.",
+      "",
+      "Created: " + results.created,
+      "Updated: " + results.updated,
+      "Already imported: " +
+        results.alreadyImported,
+      "Skipped: " + results.skipped,
+      "Failed: " + results.failed,
+      "Backup: " + results.backupName,
+      "",
+      results.failed
+        ? "Review FAILED rows in the migration preview."
+        : "All selected records imported successfully.",
+      "",
+      "The production Contact Sheet was not modified."
+    ].join("\n");
+
+    results.message = message;
+
+    companyOSMigrationNotify_(message);
+
+    return results;
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/*************************************************
+ * MEMBER BUILDING
+ *************************************************/
+
+
+/**
+ * Builds a CompanyOS member from one preview row.
+ *
+ * For existing members, information not represented in the
+ * Contact Sheet is preserved rather than erased.
+ */
+function companyOSImportBuildMember_(context) {
+  context = context || {};
+
+  const row = context.previewRow || [];
+  const map = context.previewMap || {};
+  const old = context.oldMember || {};
+  const now = new Date();
+
+  const name = companyOSImportClean_(
+    row[map["Name"]]
+  );
+
+  if (!name) {
+    throw new Error("Name is required.");
+  }
+
+  const department =
+    companyOSImportClean_(
+      row[map["Department"]]
+    ) ||
+    companyOSImportClean_(
+      old.department
+    ) ||
+    "Other";
+
+  const roleTitle =
+    companyOSImportClean_(
+      row[map["Role / Title"]]
+    ) ||
+    companyOSImportClean_(
+      old.roleTitle
+    ) ||
+    "Company Member";
+
+  const status =
+    companyOSImportClean_(
+      row[map["Proposed Status"]]
+    ) ||
+    companyOSImportClean_(
+      old.status
+    ) ||
+    "Active";
+
+  const pronouns =
+    companyOSImportClean_(
+      row[map["Pronouns"]]
+    );
+
+  const phone =
+    companyOSImportClean_(
+      row[map["Phone"]]
+    );
+
+  const email =
+    companyOSImportClean_(
+      row[map["Email"]]
+    );
+
+  const oldLegalName =
+    companyOSImportClean_(
+      old.legalName
+    );
+
+  const oldProfessionalName =
+    companyOSImportClean_(
+      old.professionalName
+    );
+
+  const oldDisplayName =
+    companyOSImportClean_(
+      old.displayName
+    );
+
+  /*
+   * During the first migration, Contact Sheet Name becomes
+   * all three name fields.
+   *
+   * On later re-runs, any customized professional /union name
+   * data already stored in CompanyOS is preserved.
+   */
+  const legalName =
+    oldLegalName || name;
+
+  const professionalName =
+    oldProfessionalName || name;
+
+  const displayName =
+    oldDisplayName || name;
+
+  const isInactive =
+    status.toLowerCase() === "inactive";
+
+  return {
+    memberId: context.memberId,
+
+    status: status,
+    department: department,
+    roleTitle: roleTitle,
+
+    legalName: legalName,
+    professionalName: professionalName,
+
+    sameAsLegalName:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.sameAsLegalName
+          )
+        : true,
+
+    displayName: displayName,
+
+    pronouns:
+      pronouns ||
+      companyOSImportClean_(
+        old.pronouns
+      ),
+
+    mayUsePronounsPublicly:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.mayUsePronounsPublicly
+          )
+        : Boolean(pronouns),
+
+    publicPronouns:
+      companyOSImportClean_(
+        old.publicPronouns
+      ),
+
+    email:
+      email ||
+      companyOSImportClean_(
+        old.email
+      ),
+
+    phone:
+      phone ||
+      companyOSImportClean_(
+        old.phone
+      ),
+
+    address:
+      companyOSImportClean_(
+        old.address
+      ),
+
+    birthday:
+      companyOSImportPreserveDate_(
+        old.birthday
+      ),
+
+    celebrateBirthday:
+      companyOSImportBoolean_(
+        old.celebrateBirthday
+      ),
+
+    favoriteBirthdayTreat:
+      companyOSImportClean_(
+        old.favoriteBirthdayTreat
+      ),
+
+    emergencyContactName:
+      companyOSImportClean_(
+        old.emergencyContactName
+      ),
+
+    emergencyContactRelationship:
+      companyOSImportClean_(
+        old.emergencyContactRelationship
+      ),
+
+    emergencyContactPhone:
+      companyOSImportClean_(
+        old.emergencyContactPhone
+      ),
+
+    allergiesPrivateNotes:
+      companyOSImportClean_(
+        old.allergiesPrivateNotes
+      ),
+
+    headshot:
+      companyOSImportClean_(
+        old.headshot
+      ),
+
+    startDate:
+      companyOSImportPreserveDate_(
+        old.startDate
+      ),
+
+    endDate:
+      companyOSImportPreserveDate_(
+        old.endDate
+      ),
+
+    returnDate:
+      companyOSImportPreserveDate_(
+        old.returnDate
+      ),
+
+    shareEmail:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.shareEmail
+          )
+        : Boolean(email),
+
+    sharePhone:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.sharePhone
+          )
+        : Boolean(phone),
+
+    shareAddress:
+      companyOSImportBoolean_(
+        old.shareAddress
+      ),
+
+    shareBirthday:
+      companyOSImportBoolean_(
+        old.shareBirthday
+      ),
+
+    shareProfessionalName:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.shareProfessionalName
+          )
+        : true,
+
+    sharePronouns:
+      old.memberId
+        ? companyOSImportBoolean_(
+            old.sharePronouns
+          )
+        : Boolean(pronouns),
+
+    gmailLabels:
+      companyOSImportResolveLabels_(
+        old.gmailLabels,
+        department,
+        status
+      ),
+
+    createdAt:
+      old.createdAt
+        ? new Date(old.createdAt)
+        : now,
+
+    updatedAt: now,
+
+    archivedAt:
+      isInactive
+        ? (
+            old.archivedAt
+              ? new Date(old.archivedAt)
+              : now
+          )
+        : ""
+  };
+}
+
+
+/**
+ * Preserves a date value without converting blanks into
+ * invalid Date objects.
+ */
+function companyOSImportPreserveDate_(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "";
+  }
+
+  if (
+    Object.prototype.toString.call(value) ===
+      "[object Date]" &&
+    !isNaN(value.getTime())
+  ) {
+    return new Date(value);
+  }
+
+  return value;
+}
+
+
+/**
+ * Existing Gmail labels are preserved.
+ * Suggested labels are used only for a new person or when an
+ * existing person has no labels.
+ */
+function companyOSImportResolveLabels_(
+  existingLabels,
+  department,
+  status
+) {
+  if (
+    Array.isArray(existingLabels) &&
+    existingLabels.length
+  ) {
+    return existingLabels.filter(Boolean);
+  }
+
+  if (
+    typeof existingLabels === "string" &&
+    companyOSImportClean_(existingLabels)
+  ) {
+    return companyOSImportClean_(
+      existingLabels
+    )
+      .split(",")
+      .map(function (label) {
+        return companyOSImportClean_(label);
+      })
+      .filter(Boolean);
+  }
+
+  return companyOSMigrationSuggestedLabels_(
+    department,
+    status
+  );
+}
+
+
+/*************************************************
+ * LOOKUPS AND MATCHING
+ *************************************************/
+
+
+function companyOSImportBuildPeopleLookup_(
+  peopleValues,
+  peopleMap
+) {
+  const lookup = {
+    byMemberId: {},
+    byEmail: {},
+    byName: {},
+    ambiguousEmails: {},
+    ambiguousNames: {}
+  };
+
+  for (
+    let index = 1;
+    index < peopleValues.length;
+    index++
+  ) {
+    const rowValues = peopleValues[index];
+    const sheetRow = index + 1;
+
+    companyOSImportAddLookupRecord_(
+      lookup,
+      {
+        sheetRow: sheetRow,
+        rowValues: rowValues,
+
+        memberId:
+          rowValues[
+            peopleMap["Member ID"]
+          ],
+
+        email:
+          rowValues[
+            peopleMap["Email"]
+          ],
+
+        names: [
+          rowValues[
+            peopleMap["Display Name"]
+          ],
+          rowValues[
+            peopleMap["Professional / Union Name"]
+          ],
+          rowValues[
+            peopleMap["Legal Name"]
+          ]
+        ]
+      }
+    );
+  }
+
+  return lookup;
+}
+
+
+function companyOSImportAddLookupRecord_(
+  lookup,
+  record
+) {
+  const memberId =
+    companyOSImportClean_(
+      record.memberId
+    );
+
+  const email =
+    companyOSImportNormalizeEmail_(
+      record.email
+    );
+
+  const storedRecord = {
+    sheetRow: record.sheetRow,
+    rowValues: record.rowValues,
+    memberId: memberId,
+    pendingAppendIndex:
+      record.pendingAppendIndex
+  };
+
+  if (memberId) {
+    lookup.byMemberId[
+      memberId.toUpperCase()
+    ] = storedRecord;
+  }
+
+  if (email) {
+    companyOSImportAddUniqueLookup_(
+      lookup.byEmail,
+      lookup.ambiguousEmails,
+      email,
+      storedRecord
+    );
+  }
+
+  (record.names || []).forEach(
+    function (name) {
+      const normalizedName =
+        companyOSImportNormalizeName_(
+          name
+        );
+
+      if (!normalizedName) {
+        return;
+      }
+
+      companyOSImportAddUniqueLookup_(
+        lookup.byName,
+        lookup.ambiguousNames,
+        normalizedName,
+        storedRecord
+      );
+    }
+  );
+}
+
+
+/**
+ * Prevents silent matching when two existing people share the
+ * same normalized name or email.
+ */
+function companyOSImportAddUniqueLookup_(
+  targetMap,
+  ambiguousMap,
+  key,
+  record
+) {
+  if (ambiguousMap[key]) {
+    return;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      targetMap,
+      key
+    )
+  ) {
+    delete targetMap[key];
+    ambiguousMap[key] = true;
+    return;
+  }
+
+  targetMap[key] = record;
+}
+
+
+function companyOSImportResolveExistingMatch_(
+  context
+) {
+  const lookup = context.lookup;
+
+  const memberId =
+    companyOSImportClean_(
+      context.memberId
+    ).toUpperCase();
+
+  const email =
+    companyOSImportNormalizeEmail_(
+      context.email
+    );
+
+  const name =
+    companyOSImportNormalizeName_(
+      context.name
+    );
+
+  if (
+    memberId &&
+    lookup.byMemberId[memberId]
+  ) {
+    return lookup.byMemberId[memberId];
+  }
+
+  if (
+    email &&
+    lookup.ambiguousEmails[email]
+  ) {
+    throw new Error(
+      "Multiple CompanyOS records use this email address. " +
+      "Assign the correct Existing Member ID before importing."
+    );
+  }
+
+  if (
+    email &&
+    lookup.byEmail[email]
+  ) {
+    return lookup.byEmail[email];
+  }
+
+  if (
+    name &&
+    lookup.ambiguousNames[name]
+  ) {
+    throw new Error(
+      "Multiple CompanyOS records share this name. " +
+      "Assign the correct Existing Member ID before importing."
+    );
+  }
+
+  if (
+    name &&
+    lookup.byName[name]
+  ) {
+    return lookup.byName[name];
+  }
+
+  return null;
+}
+
+
+/*************************************************
+ * WRITERS
+ *************************************************/
+
+
+/**
+ * Writes changed existing rows in contiguous blocks.
+ *
+ * Example:
+ * Rows 2, 3, 4 become one write.
+ * Rows 8 and 9 become a second write.
+ */
+function companyOSImportWriteUpdatedRows_(
+  sheet,
+  columnCount,
+  updatesBySheetRow
+) {
+  const rowNumbers = Object.keys(
+    updatesBySheetRow
+  )
+    .map(Number)
+    .filter(function (rowNumber) {
+      return Number.isFinite(rowNumber);
+    })
+    .sort(function (a, b) {
+      return a - b;
+    });
+
+  if (!rowNumbers.length) {
+    return;
+  }
+
+  const groups = [];
+  let currentGroup = [];
+
+  rowNumbers.forEach(function (rowNumber) {
+    if (!currentGroup.length) {
+      currentGroup = [rowNumber];
+      return;
+    }
+
+    const previous =
+      currentGroup[
+        currentGroup.length - 1
+      ];
+
+    if (rowNumber === previous + 1) {
+      currentGroup.push(rowNumber);
+      return;
+    }
+
+    groups.push(currentGroup);
+    currentGroup = [rowNumber];
+  });
+
+  if (currentGroup.length) {
+    groups.push(currentGroup);
+  }
+
+  groups.forEach(function (group) {
+    const startRow = group[0];
+
+    const rows = group.map(
+      function (sheetRow) {
+        return updatesBySheetRow[
+          sheetRow
+        ];
+      }
+    );
+
+    sheet
+      .getRange(
+        startRow,
+        1,
+        rows.length,
+        columnCount
+      )
+      .setValues(rows)
+      .setFontFamily("Arial");
+  });
+}
+
+
+function companyOSImportAppendRows_(
+  sheet,
+  columnCount,
+  rows
+) {
+  if (!rows.length) {
+    return;
+  }
+
+  const startRow =
+    sheet.getLastRow() + 1;
+
+  const requiredLastRow =
+    startRow + rows.length - 1;
+
+  if (
+    requiredLastRow >
+    sheet.getMaxRows()
+  ) {
+    sheet.insertRowsAfter(
+      sheet.getMaxRows(),
+      requiredLastRow -
+        sheet.getMaxRows()
+    );
+  }
+
+  sheet
+    .getRange(
+      startRow,
+      1,
+      rows.length,
+      columnCount
+    )
+    .setValues(rows)
+    .setFontFamily("Arial");
+}
+
+
+function companyOSImportWritePreviewResults_(
+  context
+) {
+  const bodyCount =
+    context.actions.length;
+
+  if (!bodyCount) {
+    return;
+  }
+
+  context.sheet
+    .getRange(
+      2,
+      context.map[
+        "Existing Member ID"
+      ] + 1,
+      bodyCount,
+      1
+    )
+    .setValues(
+      context.memberIds
+    );
+
+  context.sheet
+    .getRange(
+      2,
+      context.map["Action"] + 1,
+      bodyCount,
+      1
+    )
+    .setValues(
+      context.actions
+    );
+
+  const warningRange =
+    context.sheet.getRange(
+      2,
+      context.map["Warning"] + 1,
+      bodyCount,
+      1
+    );
+
+  warningRange
+    .setValues(
+      context.warnings
+    )
+    .setBackgrounds(
+      context.warningBackgrounds
+    );
+}
+
+
+function companyOSImportPushPreviewResult_(
+  context
+) {
+  context.memberIds.push([
+    context.memberId || ""
+  ]);
+
+  context.actions.push([
+    context.action || ""
+  ]);
+
+  context.warnings.push([
+    context.warning || ""
+  ]);
+
+  context.backgrounds.push([
+    context.background || null
+  ]);
+}
+
+
+/*************************************************
+ * IDS AND VALIDATION
+ *************************************************/
+
+
+function companyOSImportFindNextMemberNumber_(
+  peopleValues,
+  peopleMap
+) {
+  let highest = 0;
+
+  for (
+    let index = 1;
+    index < peopleValues.length;
+    index++
+  ) {
+    const memberId =
+      companyOSImportClean_(
+        peopleValues[index][
+          peopleMap["Member ID"]
+        ]
+      );
+
+    const match = memberId.match(
+      /^CMP-(\d+)$/i
+    );
+
+    if (!match) {
+      continue;
+    }
+
+    const number = Number(match[1]);
+
+    if (
+      Number.isFinite(number) &&
+      number > highest
+    ) {
+      highest = number;
+    }
+  }
+
+  return highest + 1;
+}
+
+
+function companyOSImportFormatMemberId_(
+  number
+) {
+  const safeNumber = Math.max(
+    Number(number) || 1,
+    1
+  );
+
+  return (
+    "CMP-" +
+    String(safeNumber).padStart(
+      4,
+      "0"
+    )
+  );
+}
+
+
+function companyOSImportCountPendingRows_(
+  previewValues,
+  previewMap
+) {
+  let count = 0;
+
+  for (
+    let index = 1;
+    index < previewValues.length;
+    index++
+  ) {
+    const row = previewValues[index];
+
+    const include =
+      companyOSImportBoolean_(
+        row[previewMap["Include"]]
+      );
+
+    const action =
+      companyOSImportClean_(
+        row[previewMap["Action"]]
+      ).toUpperCase();
+
+    if (
+      include &&
+      action !== "IMPORTED"
+    ) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+
+function companyOSImportValidatePreviewHeaders_(
+  map
+) {
+  const required = [
+    "Include",
+    "Name",
+    "Pronouns",
+    "Role / Title",
+    "Department",
+    "Phone",
+    "Email",
+    "Proposed Status",
+    "Existing Member ID",
+    "Action",
+    "Warning"
+  ];
+
+  const missing = required.filter(
+    function (header) {
+      return !Object.prototype
+        .hasOwnProperty.call(
+          map,
+          header
+        );
+    }
+  );
+
+  if (missing.length) {
+    throw new Error(
+      "Migration preview is missing required columns: " +
+      missing.join(", ")
+    );
+  }
+}
+
+
+function companyOSImportValidatePeopleHeaders_(
+  map
+) {
+  const required = [
+    "Member ID",
+    "Legal Name",
+    "Professional / Union Name",
+    "Display Name",
+    "Email"
+  ];
+
+  const missing = required.filter(
+    function (header) {
+      return !Object.prototype
+        .hasOwnProperty.call(
+          map,
+          header
+        );
+    }
+  );
+
+  if (missing.length) {
+    throw new Error(
+      "CompanyOS People is missing required columns: " +
+      missing.join(", ")
+    );
+  }
+}
+
+
+/*************************************************
+ * LOCAL HELPERS
+ *************************************************/
+
+
+function companyOSImportClean_(value) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  return String(value)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function companyOSImportBoolean_(value) {
+  if (value === true) {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return false;
+  }
+
+  const normalized =
+    companyOSImportClean_(
+      value
+    ).toLowerCase();
+
+  return [
+    "true",
+    "yes",
+    "y",
+    "1",
+    "checked",
+    "include"
+  ].indexOf(normalized) >= 0;
+}
+
+
+function companyOSImportNormalizeName_(
+  value
+) {
+  return companyOSImportClean_(value)
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function companyOSImportNormalizeEmail_(
+  value
+) {
+  return companyOSImportClean_(value)
+    .toLowerCase();
+}
