@@ -1,0 +1,167 @@
+/*************************************************
+ * 50 COMPANYOS - 06 HEADSHOT MANAGER
+ * Version: 1.0.0
+ *************************************************/
+
+/**
+ * Opens the production-branded Headshot Manager.
+ */
+function openCompanyOSHeadshotManager() {
+  companyOSEnsureDatabase_();
+
+  const html = HtmlService
+    .createTemplateFromFile("CompanyOSHeadshotManager")
+    .evaluate()
+    .setWidth(1080)
+    .setHeight(720);
+
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    productionUIDialogTitle_("Headshot Manager")
+  );
+}
+
+/**
+ * Public launcher alias for menu/button use.
+ */
+function launchCompanyOSHeadshotManager() {
+  openCompanyOSHeadshotManager();
+}
+
+/**
+ * Returns the lightweight state required by the Headshot Manager.
+ */
+function getCompanyOSHeadshotManagerState() {
+  companyOSEnsureDatabase_();
+
+  return {
+    success: true,
+    members: companyOSListMembers_().map(function(member) {
+      return {
+        memberId: member.memberId,
+        displayName:
+          member.displayName ||
+          member.professionalName ||
+          member.legalName ||
+          "Unnamed member",
+        legalName: member.legalName || "",
+        professionalName: member.professionalName || "",
+        department: member.department || "",
+        roleTitle: member.roleTitle || "",
+        status: member.status || "",
+        headshot: member.headshot || ""
+      };
+    })
+  };
+}
+
+/**
+ * Saves only the selected member's headshot field.
+ *
+ * This intentionally avoids rewriting the entire CompanyOS record.
+ */
+function saveCompanyOSHeadshotFromManager(memberId, headshotValue) {
+  const cleanMemberId = companyOSClean_(memberId);
+  const cleanHeadshot = companyOSClean_(headshotValue);
+
+  if (!cleanMemberId) {
+    throw new Error("Choose a company member first.");
+  }
+
+  companyOSEnsureDatabase_();
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const sheet = companyOSGetPeopleSheet_();
+    const values = sheet.getDataRange().getValues();
+
+    if (values.length < 2) {
+      throw new Error("The Company Roster is empty.");
+    }
+
+    const headers = values[0];
+    const map = companyOSHeaderMap_(headers);
+
+    const memberIdColumn = map["Member ID"];
+    const headshotColumn = map["Headshot URL / File ID"];
+    const updatedAtColumn = map["Updated At"];
+
+    if (memberIdColumn == null || headshotColumn == null) {
+      throw new Error(
+        'CompanyOS People is missing "Member ID" or "Headshot URL / File ID".'
+      );
+    }
+
+    const foundIndex = values.slice(1).findIndex(function(row) {
+      return companyOSClean_(row[memberIdColumn]) === cleanMemberId;
+    });
+
+    if (foundIndex < 0) {
+      throw new Error("Company member not found.");
+    }
+
+    const targetRow = foundIndex + 2;
+    const now = new Date();
+
+    sheet
+      .getRange(targetRow, headshotColumn + 1)
+      .setValue(cleanHeadshot)
+      .setFontFamily("Arial");
+
+    if (updatedAtColumn != null) {
+      sheet
+        .getRange(targetRow, updatedAtColumn + 1)
+        .setValue(now)
+        .setFontFamily("Arial");
+    }
+
+    SpreadsheetApp.flush();
+
+    const member = companyOSGetMember_(cleanMemberId);
+
+    companyOSLog_(
+      member,
+      "CompanyOS People",
+      cleanHeadshot ? "UPDATE HEADSHOT" : "CLEAR HEADSHOT",
+      "SUCCESS",
+      {
+        row: targetRow,
+        headshot: cleanHeadshot
+      }
+    );
+
+    return {
+      success: true,
+      member: {
+        memberId: member.memberId,
+        displayName:
+          member.displayName ||
+          member.professionalName ||
+          member.legalName ||
+          "Unnamed member",
+        legalName: member.legalName || "",
+        professionalName: member.professionalName || "",
+        department: member.department || "",
+        roleTitle: member.roleTitle || "",
+        status: member.status || "",
+        headshot: member.headshot || ""
+      }
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Optional test helper.
+ */
+function testCompanyOSHeadshotManagerState() {
+  const state = getCompanyOSHeadshotManagerState();
+  Logger.log(JSON.stringify({
+    success: state.success,
+    memberCount: state.members.length
+  }));
+  return state;
+}
