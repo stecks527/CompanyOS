@@ -1,6 +1,6 @@
 /*************************************************
  * 50 COMPANYOS - 01 CONFIG
- * Version: 1.0.0
+ * Version: 1.2.0
  *************************************************/
 
 const COMPANYOS_CONFIG = Object.freeze({
@@ -9,7 +9,8 @@ const COMPANYOS_CONFIG = Object.freeze({
     PEOPLE: "CompanyOS People",
     ASSIGNMENTS: "CompanyOS Assignments",
     PLANNED_OUTS: "CompanyOS Planned Outs",
-    SYNC_LOG: "CompanyOS Sync Log"
+    SYNC_LOG: "CompanyOS Sync Log",
+    MIGRATION_PREVIEW: "CompanyOS Migration Preview"
   }),
   CONTACT_SHEET_NAME: "Contact Sheet",
   STATUS_OPTIONS: Object.freeze([
@@ -25,6 +26,12 @@ const COMPANYOS_CONFIG = Object.freeze({
   ])
 });
 
+/*
+ * Legacy columns are intentionally preserved for compatibility with
+ * current migrations, response sync, and older StageOS readers.
+ * The v1.3 dialog no longer exposes Display Name, Same As Legal Name,
+ * Profile Photo, or Share Address as duplicate controls.
+ */
 const COMPANYOS_PEOPLE_HEADERS = Object.freeze([
   "Member ID", "Status", "Department", "Role / Title",
   "Legal Name", "Professional / Union Name", "Same As Legal Name",
@@ -34,6 +41,7 @@ const COMPANYOS_PEOPLE_HEADERS = Object.freeze([
   "Emergency Contact Name", "Emergency Contact Relationship",
   "Emergency Contact Phone", "Allergies / Private SM Notes",
   "Headshot URL / File ID", "Start Date", "End Date", "Return Date",
+  "Return End Date",
   "Share Email", "Share Phone", "Share Address", "Share Birthday",
   "Share Professional Name", "Share Pronouns", "Gmail Labels JSON",
   "Created At", "Updated At", "Archived At"
