@@ -1,6 +1,6 @@
 /*************************************************
  * 50 COMPANYOS - 04 SERVICE
- * Version: 1.0.0
+ * Version: 1.1.0
  *************************************************/
 
 function CompanyOS() {
@@ -12,6 +12,10 @@ function CompanyOS() {
     save: companyOSSaveMember_,
     previewContactSheet: companyOSBuildContactSheetPreview_,
     applyContactSheet: applyCompanyOSContactSheet,
+    previewMigration: companyOSBuildContactSheetMigrationPreview_,
+    executeMigration: executeCompanyOSContactSheetMigration,
+    archive: companyOSArchiveMember_,
+    reactivate: companyOSReactivateMember_,
     connectionAudit: companyOSBuildConnectionAudit_
   };
 }
@@ -33,7 +37,7 @@ function companyOSGetRosterState_() {
   companyOSEnsureDatabase_();
   const members = companyOSListMembers_();
   return {
-    system: "CompanyOS", version: "1.0.0",
+    system: "CompanyOS", version: "1.1.0",
     statuses: COMPANYOS_CONFIG.STATUS_OPTIONS.slice(),
     departments: COMPANYOS_CONFIG.DEPARTMENT_OPTIONS.slice(),
     members: members.map(m => ({ memberId: m.memberId, displayName: m.displayName,
@@ -66,4 +70,177 @@ function testCompanyOSFoundation() {
   companyOSEnsureDatabase_();
   const state = companyOSGetRosterState_();
   SpreadsheetApp.getUi().alert("CompanyOS foundation is online.\n\nMembers stored: " + state.members.length);
+}
+
+
+function previewCompanyOSMigrationFromDialog() {
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(5000)) {
+    throw new Error(
+      "CompanyOS is already building a migration preview. Please wait for it to finish."
+    );
+  }
+
+  try {
+    const result = companyOSBuildContactSheetMigrationPreview_();
+
+    return {
+      success: true,
+      ready: true,
+      totalRows: Number(result.totalRows || 0),
+      createCount: Number(result.createCount || 0),
+      updateCount: Number(result.updateCount || 0),
+      warningCount: Number(result.warningCount || 0)
+    };
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function executeCompanyOSMigrationFromDialog() {
+  const result = executeCompanyOSContactSheetMigration();
+  return {
+    success: true,
+    result: result,
+    roster: companyOSGetRosterState_()
+  };
+}
+
+function archiveCompanyOSMember(memberId) {
+  const member = companyOSArchiveMember_(memberId);
+  return { success: true, member: member, roster: companyOSGetRosterState_() };
+}
+
+function reactivateCompanyOSMember(memberId) {
+  const member = companyOSReactivateMember_(memberId);
+  return { success: true, member: member, roster: companyOSGetRosterState_() };
+}
+
+function repairCompanyOSPeopleRows() {
+  const engine = companyOSGetEngineWorkbook_();
+  const sheet = engine.getSheetByName(
+    COMPANYOS_CONFIG.SHEETS.PEOPLE
+  );
+
+  if (!sheet) {
+    throw new Error('Could not find "CompanyOS People".');
+  }
+
+  const values = sheet.getDataRange().getValues();
+
+  if (!values.length) {
+    throw new Error("CompanyOS People has no header row.");
+  }
+
+  const headers = values[0];
+  const memberIdIndex = headers.indexOf("Member ID");
+
+  if (memberIdIndex < 0) {
+    throw new Error(
+      'CompanyOS People is missing the "Member ID" header.'
+    );
+  }
+
+  const memberRows = values
+    .slice(1)
+    .filter(function(row) {
+      return companyOSClean_(row[memberIdIndex]);
+    });
+
+  if (!memberRows.length) {
+    throw new Error(
+      "No populated CompanyOS member records were found."
+    );
+  }
+
+  const timestamp = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyyMMdd_HHmmss"
+  );
+
+  sheet
+    .copyTo(engine)
+    .setName(
+      "CompanyOS People Before Row Repair " +
+      timestamp
+    );
+
+  /*
+   * Remove the entire current body, including FALSE values
+   * created by checkbox validation.
+   */
+  sheet
+    .getRange(
+      2,
+      1,
+      sheet.getMaxRows() - 1,
+      sheet.getMaxColumns()
+    )
+    .clear({
+      contentsOnly: true
+    });
+
+  /*
+   * Write the real members directly below the header.
+   */
+  sheet
+    .getRange(
+      2,
+      1,
+      memberRows.length,
+      headers.length
+    )
+    .setValues(memberRows)
+    .setFontFamily("Arial");
+
+  SpreadsheetApp.flush();
+
+  Logger.log(
+    "CompanyOS row repair complete. Members moved: " +
+    memberRows.length
+  );
+
+  return {
+    success: true,
+    membersMoved: memberRows.length,
+    firstMemberRow: 2,
+    lastMemberRow: memberRows.length + 1
+  };
+}
+
+function testCompanyOSV11() {
+  const setup = companyOSEnsureDatabase_();
+  const roster = companyOSGetRosterState_();
+
+  const result = {
+    success: true,
+    version: roster.version,
+    engineName: setup.engineName,
+    sheetNames: setup.sheetNames,
+    memberCount: roster.members.length
+  };
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "CompanyOS v1.1 is online.\n\n" +
+      "Engine: " + result.engineName + "\n" +
+      "Members: " + result.memberCount + "\n\n" +
+      "Next: open CompanyOS and import the Contact Sheet."
+    );
+  } catch (err) {
+    Logger.log(JSON.stringify(result));
+  }
+
+  return result;
+}
+
+function testCompanyOSMemberCount() {
+  const members = companyOSListMembers_();
+  Logger.log("Members: " + members.length);
+  if (members.length) {
+    Logger.log(JSON.stringify(members[0], null, 2));
+  }
 }
