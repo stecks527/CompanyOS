@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --blue: #2457c5;
+      --blue-soft: #eef3ff;
+      --green: #18794e;
+      --green-soft: #eaf7f0;
+      --amber: #9a6700;
+      --amber-soft: #fff7d6;
+      --red: #b42318;
+      --red-soft: #fff0ee;
+      --border: #d8dee9;
+      --text: #202124;
+      --muted: #667085;
+      --panel: #f8fafc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background: white;
+    }
+
+    .shell {
+      padding: 18px;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: default;
+    }
+
+    .primary {
+      background: var(--blue);
+      color: white;
+    }
+
+    .secondary {
+      background: #e9edf3;
+      color: var(--text);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 9px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px;
+      background: var(--panel);
+    }
+
+    .summary-value {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 3px;
+    }
+
+    .summary-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 7px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+
+    .tab {
+      background: transparent;
+      border-radius: 8px 8px 0 0;
+      color: var(--muted);
+      padding: 10px 13px;
+    }
+
+    .tab.active {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .section-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 12px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      padding: 14px;
+      margin-bottom: 10px;
+      background: white;
+    }
+
+    .card.changed { border-left: 5px solid var(--green); }
+    .card.ambiguous { border-left: 5px solid var(--amber); }
+    .card.unmatched { border-left: 5px solid var(--red); }
+
+    .person-row {
+      display: grid;
+      grid-template-columns: 28px minmax(190px, 1.2fr) minmax(240px, 1.6fr) minmax(170px, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .person-name {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .file-name {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--blue-soft);
+      color: var(--blue);
+      margin-top: 5px;
+    }
+
+    .choice {
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    .choice:hover {
+      background: var(--panel);
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .status {
+      display: none;
+      margin-top: 12px;
+      padding: 11px 13px;
+      border-radius: 9px;
+      font-weight: 700;
+    }
+
+    .status.show { display: block; }
+    .status.info { background: var(--blue-soft); color: var(--blue); }
+    .status.success { background: var(--green-soft); color: var(--green); }
+    .status.error { background: var(--red-soft); color: var(--red); }
+
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+      background: var(--panel);
+      border-radius: 10px;
+    }
+
+    @media (max-width: 900px) {
+      .summary { grid-template-columns: repeat(3, 1fr); }
+      .person-row { grid-template-columns: 28px 1fr; }
+      .person-row > div:nth-child(n+3) {
+        grid-column: 2;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+    <div class="header">
+      <div>
+        <h1>CompanyOS Headshots</h1>
+        <div class="subtitle" id="subtitle">
+          Scanning CompanyOS and the connected headshot folder…
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" onclick="refreshPreview()">
+          Refresh Preview
+        </button>
+
+        <button class="primary" id="applyButton" onclick="applySelections()">
+          Apply Headshots
+        </button>
+      </div>
+    </div>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="matched" onclick="showPanel('matched', this)">
+        Ready to Apply
+      </button>
+      <button class="tab" data-panel="needsChoice" onclick="showPanel('needsChoice', this)">
+        Needs Choice
+      </button>
+    </div>
+
+    <div id="matched" class="panel active"></div>
+    <div id="needsChoice" class="panel"></div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    let payload = <?!= JSON.stringify(initialPayload) ?>;
+
+    document.addEventListener("DOMContentLoaded", function() {
+      renderAll();
+    });
+
+    function renderAll() {
+      renderSummary();
+      renderMatched();
+      renderNeedsChoice();
+
+      document.getElementById("subtitle").textContent =
+        'Folder: "' +
+        payload.rootFolderName +
+        '" • Preview generated ' +
+        new Date(payload.generatedAt).toLocaleString();
+    }
+
+    function renderSummary() {
+      const s = payload.summary;
+
+      const cards = [
+        ["Company Members", s.totalPeople],
+        ["Complete", s.completePeople],
+        ["Missing", s.missingPeople],
+        ["Ready to Apply", s.readyToApply],
+        ["Needs Choice", s.needsChoice]
+      ];
+
+      document.getElementById("summary").innerHTML = cards
+        .map(function(item) {
+          return (
+            '<div class="summary-card">' +
+              '<div class="summary-value">' + escapeHtml(item[1]) + '</div>' +
+              '<div class="summary-label">' + escapeHtml(item[0]) + '</div>' +
+            '</div>'
+          );
+        })
+        .join("");
+    }
+
+    function renderMatched() {
+      const container = document.getElementById("matched");
+
+      if (!payload.matched.length) {
+        container.innerHTML = emptyState(
+          payload.summary.missingPeople
+            ? "No missing headshots have a confident automatic match."
+            : "Every CompanyOS person already has a headshot."
+        );
+        return;
+      }
+
+      container.innerHTML =
+        '<p class="section-note">' +
+          payload.matched.length +
+          ' missing headshot' +
+          (payload.matched.length === 1 ? "" : "s") +
+          ' matched confidently and selected for application.' +
+        '</p>' +
+        payload.matched.map(function(item) {
+          return (
+            '<div class="card changed">' +
+              '<div class="person-row">' +
+                '<div>' +
+                  '<input type="checkbox" class="matched-check"' +
+                    ' data-member-id="' + escapeAttribute(item.memberId) + '"' +
+                    ' data-file-id="' + escapeAttribute(item.file.fileId) + '"' +
+                    ' data-current="' + escapeAttribute(item.currentReference || "") + '"' +
+                    ' checked>' +
+                '</div>' +
+                '<div>' +
+                  '<div class="person-name">' + escapeHtml(item.personName) + '</div>' +
+                  '<div class="meta">Matched by ' + escapeHtml(item.matchMethod) + '</div>' +
+                '</div>' +
+                '<div>' +
+                  '<div class="file-name">' +
+                    '<a href="' + escapeAttribute(item.file.url) + '" target="_blank">' +
+                      escapeHtml(item.file.fileName) +
+                    '</a>' +
+                  '</div>' +
+                  '<div class="meta">' + escapeHtml(item.file.folderPath) + '</div>' +
+                '</div>' +
+                '<div>' +
+                  '<span class="badge">Missing headshot</span>' +
+                '</div>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join("");
+    }
+
+    function renderNeedsChoice() {
+      const container = document.getElementById("needsChoice");
+
+      if (!payload.ambiguous.length && !payload.unmatchedPeople.length) {
+        container.innerHTML = emptyState(
+          "No manual choices are needed. Every person has a clean exact match."
+        );
+        return;
+      }
+
+      let output =
+        '<p class="section-note">' +
+          'Every person shown here is missing a headshot. Choose a suggested file or manually assign an available photo.' +
+        '</p>';
+
+      if (payload.ambiguous.length) {
+        output += '<h3>Multiple Possible Matches</h3>';
+
+        output += payload.ambiguous.map(function(item) {
+          const name = "choice_" + safeKey(item.memberId);
+
+          return (
+            '<div class="card ambiguous">' +
+              '<div class="person-name">' + escapeHtml(item.personName) + '</div>' +
+              '<div class="meta">Current: ' + escapeHtml(item.currentDisplay) + '</div>' +
+              item.choices.map(function(file) {
+                return (
+                  '<label class="choice">' +
+                    '<input type="radio"' +
+                      ' name="' + escapeAttribute(name) + '"' +
+                      ' class="manual-choice"' +
+                      ' data-member-id="' + escapeAttribute(item.memberId) + '"' +
+                      ' data-current="' + escapeAttribute(item.currentReference || "") + '"' +
+                      ' value="' + escapeAttribute(file.fileId) + '">' +
+                    ' <strong>' + escapeHtml(file.fileName) + '</strong>' +
+                    '<div class="meta">' + escapeHtml(file.folderPath) + '</div>' +
+                    '<div class="meta"><a href="' + escapeAttribute(file.url) + '" target="_blank">Open in Drive</a></div>' +
+                  '</label>'
+                );
+              }).join("") +
+              '<label class="choice">' +
+                '<input type="radio" name="' + escapeAttribute(name) + '" value="" checked>' +
+                ' Skip for now' +
+              '</label>' +
+            '</div>'
+          );
+        }).join("");
+      }
+
+      if (payload.unmatchedPeople.length) {
+        output += '<h3>Manual Assignments</h3>';
+
+        if (!payload.unmatchedFiles.length) {
+          output += emptyState(
+            "There are missing headshots, but no unassigned image files are currently available."
+          );
+        } else {
+          output += payload.unmatchedPeople.map(function(item) {
+            const selectId = "manual_" + safeKey(item.memberId);
+
+            return (
+              '<div class="card unmatched">' +
+                '<div class="person-name">' + escapeHtml(item.personName) + '</div>' +
+                '<div class="meta">No confident filename match was found.</div>' +
+                '<div style="margin-top:10px;">' +
+                  '<select class="manual-select"' +
+                    ' id="' + escapeAttribute(selectId) + '"' +
+                    ' data-member-id="' + escapeAttribute(item.memberId) + '"' +
+                    ' data-current="' + escapeAttribute(item.currentReference || "") + '"' +
+                    ' onchange="updateManualFileLink(this)"' +
+                    ' style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;">' +
+                    '<option value="">Skip for now</option>' +
+                    payload.unmatchedFiles.map(function(file) {
+                      return (
+                        '<option value="' + escapeAttribute(file.fileId) + '"' +
+                          ' data-url="' + escapeAttribute(file.url) + '">' +
+                          escapeHtml(file.fileName + " — " + file.folderPath) +
+                        '</option>'
+                      );
+                    }).join("") +
+                  '</select>' +
+                '</div>' +
+                '<div class="meta" style="margin-top:8px;">' +
+                  '<a id="' + escapeAttribute(selectId + "_link") + '"' +
+                    ' href="#" target="_blank" style="display:none;">Open selected photo in Drive</a>' +
+                '</div>' +
+              '</div>'
+            );
+          }).join("");
+        }
+      }
+
+      container.innerHTML = output;
+    }
+
+
+
+    function updateManualFileLink(select) {
+      const link = document.getElementById(select.id + "_link");
+      const option = select.options[select.selectedIndex];
+      const url = option ? option.dataset.url : "";
+
+      if (!url) {
+        link.style.display = "none";
+        link.removeAttribute("href");
+        return;
+      }
+
+      link.href = url;
+      link.style.display = "inline";
+    }
+
+    function collectSelections() {
+      const selections = [];
+
+      document.querySelectorAll(".matched-check:checked").forEach(function(input) {
+        selections.push({
+          memberId: input.dataset.memberId,
+          fileId: input.dataset.fileId,
+          expectedCurrentReference: input.dataset.current
+        });
+      });
+
+      document.querySelectorAll(".manual-choice:checked").forEach(function(input) {
+        if (!input.value) return;
+
+        selections.push({
+          memberId: input.dataset.memberId,
+          fileId: input.value,
+          expectedCurrentReference: input.dataset.current
+        });
+      });
+
+      document.querySelectorAll(".manual-select").forEach(function(select) {
+        if (!select.value) return;
+
+        selections.push({
+          memberId: select.dataset.memberId,
+          fileId: select.value,
+          expectedCurrentReference: select.dataset.current
+        });
+      });
+
+      return selections;
+    }
+
+    function applySelections() {
+      const selections = collectSelections();
+
+      if (!selections.length) {
+        showStatus("No headshots are selected.", "info");
+        return;
+      }
+
+      setBusy(true);
+      showStatus(
+        "Applying " +
+          selections.length +
+          " selected headshot" +
+          (selections.length === 1 ? "" : "s") +
+          "…",
+        "info"
+      );
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          let message = result.message;
+
+          if (result.conflictCount) {
+            message +=
+              " " +
+              result.conflictCount +
+              " conflict" +
+              (result.conflictCount === 1 ? "" : "s") +
+              " was skipped because CompanyOS changed after the preview.";
+          }
+
+          showStatus(message, result.conflictCount ? "info" : "success");
+          setBusy(false);
+          refreshPreview();
+        })
+        .withFailureHandler(function(error) {
+          showStatus(error.message || String(error), "error");
+          setBusy(false);
+        })
+        .companyOSApplyHeadshotSelections({
+          selections: selections
+        });
+    }
+
+    function refreshPreview() {
+      setBusy(true);
+      showStatus("Refreshing headshot preview…", "info");
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          payload = result;
+          renderAll();
+          showStatus("Preview refreshed.", "success");
+          setBusy(false);
+        })
+        .withFailureHandler(function(error) {
+          showStatus(error.message || String(error), "error");
+          setBusy(false);
+        })
+        .companyOSRefreshHeadshotPreview();
+    }
+
+    function showPanel(panelId, button) {
+      document.querySelectorAll(".panel").forEach(function(panel) {
+        panel.classList.remove("active");
+      });
+
+      document.querySelectorAll(".tab").forEach(function(tab) {
+        tab.classList.remove("active");
+      });
+
+      document.getElementById(panelId).classList.add("active");
+      button.classList.add("active");
+    }
+
+    function setBusy(isBusy) {
+      document.querySelectorAll("button").forEach(function(button) {
+        button.disabled = isBusy;
+      });
+    }
+
+    function showStatus(message, type) {
+      const status = document.getElementById("status");
+
+      status.className = "status show " + type;
+      status.textContent = message;
+    }
+
+    function emptyState(message) {
+      return '<div class="empty">' + escapeHtml(message) + '</div>';
+    }
+
+    function safeKey(value) {
+      return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    }
+
+    function escapeHtml(value) {
+      return String(value === null || value === undefined ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+  </script>
+</body>
+</html>
